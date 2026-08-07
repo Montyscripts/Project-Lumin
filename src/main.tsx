@@ -1637,17 +1637,17 @@ export class GdmLiveAudio extends LitElement {
       flex: 1 1 auto;
       min-height: 0;
       overflow-y: auto;
-      padding: 20px;
+      padding: 12px 16px;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 10px;
       -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
     }
 
     .transcription-entry {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 3px;
       opacity: 0;
       transform: translateY(10px);
       animation: fadeIn 0.5s forwards;
@@ -1809,8 +1809,8 @@ export class GdmLiveAudio extends LitElement {
     }
 
     .message-bubble {
-      padding: 12px 16px;
-      border-radius: 18px;
+      padding: 6px 12px;
+      border-radius: 12px;
       background-color: rgba(255, 255, 255, 0.05);
       border: 1px solid var(--border-color);
       box-sizing: border-box;
@@ -1838,10 +1838,10 @@ export class GdmLiveAudio extends LitElement {
     .transcription-text {
       font-size: inherit;
       color: var(--text-primary);
-      line-height: 1.6;
+      line-height: 1.4;
       word-break: break-word;
       overflow-wrap: anywhere;
-      white-space: pre-wrap;
+      white-space: normal;
     }
 
     .chat-history {
@@ -1862,10 +1862,15 @@ export class GdmLiveAudio extends LitElement {
       overflow-wrap: anywhere;
       width: 100%;
       box-sizing: border-box;
+      white-space: normal;
     }
 
     .markdown-body p {
-      margin: 0 0 1em 0;
+      margin: 0 0 0.4em 0;
+    }
+
+    .markdown-body p:first-child {
+      margin-top: 0;
     }
 
     .markdown-body p:last-child {
@@ -2045,7 +2050,7 @@ export class GdmLiveAudio extends LitElement {
       gap: 8px;
       background: rgba(0, 0, 0, 0.4);
       border-radius: 18px;
-      padding: 6px;
+      padding: 4px 6px;
       border: 1px solid var(--border-color);
       box-sizing: border-box;
       width: 100%;
@@ -2069,11 +2074,11 @@ export class GdmLiveAudio extends LitElement {
       box-shadow: none;
       color: var(--text-primary);
       font-size: 0.95rem;
-      padding: 12px 10px 10px 10px;
-      min-height: 72px; /* ~3-4 lines initial min-height */
-      max-height: 220px; /* ~8-10 lines max height */
+      padding: 8px 10px 6px 10px;
+      min-height: 38px; /* Compact initial min-height aligned with buttons */
+      max-height: 200px; /* ~8-10 lines max height */
       resize: vertical; /* Enable vertical resizability handle */
-      line-height: 1.45;
+      line-height: 1.4;
       font-family: inherit;
       box-sizing: border-box;
       overflow-y: auto;
@@ -2096,7 +2101,7 @@ export class GdmLiveAudio extends LitElement {
       height: 36px;
       flex-shrink: 0;
       align-self: flex-end;
-      margin-bottom: 2px;
+      margin-bottom: 1px;
       background: transparent;
       border: none;
       color: rgba(255, 255, 255, 0.65);
@@ -8462,7 +8467,7 @@ Available Effects:
               </svg>
             </button>
             <textarea
-              rows="3"
+              rows="1"
               placeholder="Ask about visuals, audio, or submitted content..."
               .value=${this.chatInputText}
               @input=${(e: Event) =>

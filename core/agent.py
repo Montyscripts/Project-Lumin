@@ -2048,9 +2048,21 @@ class LuminAgent:
             app = words[-1] if words else "notepad"
             return self.tool_registry.execute_tool("launch_application", app)
 
-        # 5. Fallback diagnostics and system status
+        # 5. Friendly conversational response / Fallback guidance when LLM is offline
         time_str = self.tool_registry.execute_tool("get_system_time")
-        return f"LUMIN Desktop Agent processed request: '{query}'\n- {time_str}\n- All local desktop automation capabilities online and active."
+        
+        # Conversational greetings & chit-chat checks
+        if any(w in low for w in ("hello", "hi", "hey", "greetings", "good morning", "good afternoon", "good evening", "howdy")):
+            return f"Hello! I am LUMIN, your local AI desktop assistant. How can I assist you today? ({time_str})"
+        if "how are you" in low or "how was your day" in low or "how's it going" in low or "how do you do" in low:
+            return f"I'm doing great and ready to help! All system capabilities are active. To enable full AI chat capabilities, make sure Ollama is installed with a model like `llama3.2:3b`. What would you like to work on?"
+        
+        return (
+            f"I received your request: '{query}'.\n\n"
+            f"- **System Time**: {time_str}\n"
+            f"- **Status**: Desktop automation tools are active.\n"
+            f"- **AI Note**: Local Ollama model is currently offline or uninstalled. Run `ollama pull llama3.2:3b` in your terminal for full conversational AI responses."
+        )
 
     def _handle_models_status_command(self) -> str:
         """Renders comprehensive, explainable model status and local routing table."""

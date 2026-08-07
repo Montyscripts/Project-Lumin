@@ -31,6 +31,11 @@
 [Quick Start](#-quick-start) • [Key Features](#-key-features) • [Architecture](docs/ARCHITECTURE.md) • [Dual MCP Engine](#-model-context-protocol-mcp-dual-engine) • [Commands](docs/COMMANDS.md) • [Troubleshooting](docs/TROUBLESHOOTING.md) • [Contributing](CONTRIBUTING.md)
 
 ---
+
+<!-- DEMO PREVIEW -->
+![LUMIN AI Agent Demo](assets/demo_preview.jpg)
+*Real-time audio-reactive GLSL 3D sphere visualizer with continuous voice conversation & local Ollama routing.*
+
 ---
 
 </div>
@@ -56,6 +61,26 @@
 | **Novel System Architecture** | 🟡 Great for initial code drafts & structural maps | ✅ Ideal for high-parameter synthesis |
 
 ---
+
+## 📸 Interface & Visualizer Preview
+
+```
++-------------------------------------------------------------------------------+
+|  [LUMIN 3D VISUALIZER STAGE]                                                  |
+|                                                                               |
+|                            .---.                                              |
+|                          /   *   \     <-- GLSL Audio-Reactive Sphere         |
+|                         |  O   O  |                                           |
+|                          \   ~   /                                            |
+|                            '---'                                              |
+|                                                                               |
+|  [Continuous Mode Active]                                      [End]          |
+|  User: "Analyze the attached Python agent file and summarize its structure"   |
+|  Agent: "Extracted structural map for agent.py across 8 sections..."          |
+|                                                                               |
++-------------------------------------------------------------------------------+
+```
+
 ---
 
 ## ✨ Key Features Summary

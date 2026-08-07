@@ -12,7 +12,7 @@ import helmet from 'helmet';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : 5173;
+const PORT = process.env.PORT || 5173;
 const isProd = process.env.NODE_ENV === 'production';
 const isPlatformEnv = process.env.DISABLE_HMR === 'true' || !!process.env.K_SERVICE;
 
@@ -319,12 +319,10 @@ function handleClientDisconnect(immediate = false) {
 
     shutdownTimer = setTimeout(() => {
       if (clients.size === 0) {
-        console.log('[Server] Grace period expired with 0 active clients. Force killing agent process tree and exiting server...');
+        console.log('[Server] Grace period expired with 0 active clients. Force killing agent process tree...');
         killAgentProcessTree();
-        setTimeout(() => {
-          console.log('[Server] Exiting server process cleanly (Port released).');
-          process.exit(0);
-        }, 200);
+        // Note: Do NOT exit the main Node.js process (process.exit) in server / Cloud Run environment.
+        // The HTTP server must remain running 24/7 on PORT 3000 to handle health checks and new connections.
       } else {
         console.log(`[Server] Active client reconnected (${clients.size}). Shutdown canceled.`);
       }
@@ -490,16 +488,7 @@ app.post('/api/shutdown', (req, res) => {
   console.log(`[Server] Received shutdown request (force=${isForce}).`);
   res.json({ ok: true, status: isForce ? 'terminating' : 'scheduled' });
 
-  if (isForce) {
-    console.log('[Server] Force stop requested. Killing Python agent process tree and exiting server process immediately...');
-    killAgentProcessTree();
-    setTimeout(() => {
-      console.log('[Server] Force shutdown complete.');
-      process.exit(0);
-    }, 200);
-  } else {
-    handleClientDisconnect(true);
-  }
+  killAgentProcessTree();
 });
 
 function normalizeEdgeVoiceName(voice) {
@@ -871,7 +860,7 @@ if (isProd) {
   // Production static server
   const distPath = path.join(__dirname, 'dist');
   app.use(express.static(distPath));
-  app.get('*', (req, res) => {
+  app.get(/(.*)/, (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 } else {

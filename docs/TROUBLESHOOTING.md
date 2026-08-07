@@ -44,17 +44,17 @@ This document provides solutions for common runtime, setup, and hardware issues.
 
 ---
 
-### 5. Port 3000 or Port 5173 Conflicts
-- **Cause**: Another service is using port 3000 or 5173.
+### 5. Port 5173 Conflicts
+- **Cause**: Another service is using port 5173.
 - **Fix**:
   - Windows:
     ```cmd
-    netstat -ano | findstr :3000
+    netstat -ano | findstr :5173
     taskkill /PID <PID> /F
     ```
   - Linux/macOS:
     ```bash
-    lsof -i :3000
+    lsof -i :5173
     kill -9 <PID>
     ```
 
