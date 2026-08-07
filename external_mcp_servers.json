@@ -1,0 +1,190 @@
+{
+  "runway_video": {
+    "name": "runway_video",
+    "label": "Runway Gen-3 Video MCP",
+    "endpoint": "https://api.dev.runwayml.com/v1/image_to_video",
+    "description": "Generates cinematic AI video clips, motion graphics, and camera animations via Runway Gen-3.",
+    "active": true,
+    "category": "Video & Media",
+    "tools": [
+      {
+        "name": "generate_video",
+        "description": "Generates AI video clip from text prompt using Runway Gen-3.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "description": "Visual prompt describing video scene."
+            },
+            "duration_sec": {
+              "type": "integer",
+              "description": "Duration in seconds (5 or 10).",
+              "default": 5
+            },
+            "aspect_ratio": {
+              "type": "string",
+              "description": "Aspect ratio (16:9 or 9:16).",
+              "default": "16:9"
+            }
+          },
+          "required": [
+            "prompt"
+          ]
+        }
+      },
+      {
+        "name": "extend_video",
+        "description": "Extends existing Runway video clip by N seconds.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "video_id": {
+              "type": "string",
+              "description": "Target video ID to extend."
+            },
+            "extension_prompt": {
+              "type": "string",
+              "description": "Prompt for new continuation scene."
+            }
+          },
+          "required": [
+            "video_id",
+            "extension_prompt"
+          ]
+        }
+      }
+    ]
+  },
+  "elevenlabs_audio": {
+    "name": "elevenlabs_audio",
+    "label": "ElevenLabs Voice & Audio MCP",
+    "endpoint": "https://api.elevenlabs.io/v1/text-to-speech",
+    "description": "Ultra-realistic voice synthesis, voice cloning, and audio effect generation.",
+    "active": true,
+    "category": "Voice & Audio",
+    "tools": [
+      {
+        "name": "synthesize_speech",
+        "description": "Synthesizes emotive human speech with specified voice ID.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "description": "Script text to speak."
+            },
+            "voice_id": {
+              "type": "string",
+              "description": "Target voice model ID.",
+              "default": "21m00Tcm4TlvDq8ikWAM"
+            }
+          },
+          "required": [
+            "text"
+          ]
+        }
+      },
+      {
+        "name": "generate_sound_effect",
+        "description": "Creates custom studio sound effects from text descriptions.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string",
+              "description": "Sound effect description (e.g. futuristic laser blast)."
+            }
+          },
+          "required": [
+            "description"
+          ]
+        }
+      }
+    ]
+  },
+  "google_workspace": {
+    "name": "google_workspace",
+    "label": "Google Workspace MCP",
+    "endpoint": "https://www.googleapis.com/drive/v3/files",
+    "description": "Access Google Docs, Sheets, Drive files, Calendar events, and Gmail workflows.",
+    "active": true,
+    "category": "Productivity",
+    "tools": [
+      {
+        "name": "search_drive",
+        "description": "Search user's Google Drive files by query string.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search query keywords or file type."
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      },
+      {
+        "name": "create_sheet_row",
+        "description": "Append row data into a Google Spreadsheet.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "spreadsheet_id": {
+              "type": "string",
+              "description": "Target Google Sheet ID."
+            },
+            "row_values": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Array of cell values."
+            }
+          },
+          "required": [
+            "spreadsheet_id",
+            "row_values"
+          ]
+        }
+      }
+    ]
+  },
+  "sqlite_database": {
+    "name": "sqlite_database",
+    "label": "SQLite / Local DB MCP",
+    "endpoint": "sqlite3://mcp_database.db",
+    "description": "Query, inspect, and update relational SQL databases directly via local SQLite engine.",
+    "active": true,
+    "category": "Database & Storage",
+    "tools": [
+      {
+        "name": "execute_query",
+        "description": "Execute SELECT or DML query on connected SQLite database.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "sql": {
+              "type": "string",
+              "description": "SQL statement to execute."
+            }
+          },
+          "required": [
+            "sql"
+          ]
+        }
+      },
+      {
+        "name": "describe_tables",
+        "description": "List tables and column schemas in database.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ]
+  }
+}

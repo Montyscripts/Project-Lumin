@@ -1,0 +1,60 @@
+name: LUMIN CI Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate-frontend:
+    name: Validate Frontend (Node.js & TypeScript)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Run Type Check & Linter
+        run: npm run lint
+
+      - name: Verify Production Build
+        run: npm run build
+
+  validate-python:
+    name: Validate Python Backend Core
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Core Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Check Python Syntax & Compilation
+        run: |
+          python -m py_compile agent.py core/agent.py core/capabilities.py core/writing.py audio/local_tts.py llm/client.py memory/manager.py audio/tts_cache.py tools/registry.py tools/mcp_server.py tools/mcp_client.py utils/helpers.py
+
+      - name: Execute Python Unit Test Suite & System Eval Harness
+        run: |
+          python -m unittest discover -s tests
+          python tests/eval/run_eval.py
+

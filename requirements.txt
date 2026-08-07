@@ -1,0 +1,33 @@
+# ==============================================================================
+# LUMIN AI Agent — Core Python Dependencies (v1.0.0 Release)
+# ==============================================================================
+
+# --- LLM & Agent Framework ---
+langchain>=0.3.0,<0.4.0
+langchain-core>=0.3.0,<0.4.0
+langchain-ollama>=0.2.0,<0.3.0
+langchain-community>=0.3.0,<0.4.0
+langgraph>=0.2.0,<0.3.0
+
+# --- Audio & Speech Processing ---
+SpeechRecognition>=3.10.0
+sounddevice>=0.4.6
+edge-tts>=6.1.0,<7.0.0
+numpy>=1.24.0,<2.2.0
+
+# --- Multimodal & File Parsing ---
+pillow>=10.0.0
+pypdf>=4.0.0
+python-docx>=1.1.0
+openpyxl>=3.1.0
+python-pptx>=0.6.23
+
+# --- System & Automation Utilities ---
+pyperclip>=1.8.2
+psutil>=5.9.0
+requests>=2.31.0
+ddgs>=5.0
+selenium>=4.15.0
+webdriver-manager>=4.0.0
+rich>=13.0.0
+GPUtil>=1.4.0

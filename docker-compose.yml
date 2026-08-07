@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # --- LUMIN AI Agent Core Service ---
+  lumin-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lumin-ai-agent
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - OLLAMA_HOST=http://ollama:11434
+      - NODE_ENV=production
+    volumes:
+      - lumin-tts-cache:/app/tts_cache
+      - lumin-memory:/app/memory_data
+      - lumin-uploads:/app/uploads
+    depends_on:
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - lumin-network
+
+  # --- Ollama Local LLM Engine Service ---
+  ollama:
+    image: ollama/ollama:latest
+    container_name: lumin-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - lumin-network
+    # To enable GPU acceleration with NVIDIA GPUs:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+networks:
+  lumin-network:
+    driver: bridge
+
+volumes:
+  lumin-tts-cache:
+  lumin-memory:
+  lumin-uploads:
+  ollama-models:
