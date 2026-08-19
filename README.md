@@ -24,16 +24,7 @@
 </div>
 
 <div align="center">
-  <video
-    src="assets/lumin-demo.mp4"
-    controls
-    muted
-    loop
-    playsinline
-    width="900"
-  >
-    Your browser does not support the video tag.
-  </video>
+  <img src="assets/lumin-demo.gif" alt="LUMIN Demo" width="900">
 </div>
 
 <br>
