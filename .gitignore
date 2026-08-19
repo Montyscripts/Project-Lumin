@@ -66,3 +66,6 @@ setup_log_*.txt
 
 # Docker & build temporary files
 .docker/
+LUMIN_Update_GitHub.bat
+LUMIN_Fresh_GitHub_Uploader.bat
+LUMIN_Fix_Everything_And_Prepare_Upload.bat
