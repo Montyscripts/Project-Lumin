@@ -27,8 +27,8 @@
 <div align="center">
   <img src="assets/lumin-demo.gif" alt="LUMIN Demo" width="900">
 </div>
----
 <br>
+---
 
 ## 💡 Why LUMIN?
 
