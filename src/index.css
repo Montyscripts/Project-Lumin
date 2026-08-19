@@ -1,0 +1,185 @@
+:root {
+  /* ==========================================================================
+     LUMIN DESIGN SYSTEM TOKENS
+     ========================================================================== */
+  
+  /* Color Palette - Glow Theme Defaults (Dynamically overridable by Themes) */
+  --glow-color: #00aaff;
+  --glow-color-faded: rgba(0, 170, 255, 0.28);
+  --glow-color-subtle: rgba(0, 170, 255, 0.10);
+  --glow-color-intense: rgba(0, 170, 255, 0.6);
+
+  /* Deep Background Canvas & Surface Hierarchy */
+  --background-primary: #08090e;
+  --background-secondary: #0d111a;
+  --background-surface: rgba(14, 18, 28, 0.85);
+  --background-surface-hover: rgba(22, 28, 44, 0.9);
+  --background-card: rgba(16, 22, 35, 0.8);
+  --background-input: rgba(8, 11, 19, 0.9);
+  --background-elevated: rgba(20, 26, 42, 0.95);
+
+  /* Border Tokens */
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-color-hover: rgba(255, 255, 255, 0.16);
+  --border-color-active: var(--glow-color, #00aaff);
+  --border-color-focus: var(--glow-color, #00aaff);
+
+  /* Text & Typography Hierarchy */
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-inverse: #000000;
+
+  /* Font Families */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Spacing Scale (4px, 8px, 12px, 16px, 20px, 24px, 32px) */
+  --lumin-space-2xs: 2px;
+  --lumin-space-xs: 4px;
+  --lumin-space-sm: 8px;
+  --lumin-space-md: 12px;
+  --lumin-space-lg: 16px;
+  --lumin-space-xl: 20px;
+  --lumin-space-2xl: 24px;
+  --lumin-space-3xl: 32px;
+
+  /* Border Radii Hierarchy */
+  --lumin-radius-xs: 4px;
+  --lumin-radius-sm: 6px;
+  --lumin-radius-md: 8px;
+  --lumin-radius-lg: 12px;
+  --lumin-radius-xl: 16px;
+  --lumin-radius-full: 9999px;
+
+  /* Shadows & Depth */
+  --lumin-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --lumin-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --lumin-shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.6);
+  --lumin-shadow-glow: 0 0 16px var(--glow-color-faded, rgba(0, 170, 255, 0.25));
+
+  /* Transitions */
+  --lumin-transition-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  --lumin-transition-base: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  --lumin-transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(--background-primary, #08090e);
+  color: var(--text-primary, #f8fafc);
+  overflow: hidden;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Prevent pull-to-refresh and other gestures on mobile */
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+/* Global Selection Styling */
+::selection {
+  background: var(--glow-color-faded, rgba(0, 170, 255, 0.35));
+  color: #ffffff;
+}
+
+/* Global Form Controls & Dark-Themed Baseline Consistency */
+:root, html, body {
+  color-scheme: dark;
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+  color-scheme: dark;
+}
+
+/* Global Form Control Resets & Consistent Dark Surfaces */
+input[type="text"],
+input[type="search"],
+input[type="password"],
+input[type="number"],
+input[type="email"],
+input[type="url"],
+input:not([type]),
+textarea,
+select {
+  background-color: var(--background-surface, #131722);
+  color: var(--text-primary, #f8fafc);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+  border-radius: var(--lumin-radius-md, 8px);
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  outline: none;
+  transition: var(--lumin-transition-fast, all 0.15s ease);
+  box-sizing: border-box;
+}
+
+input[type="text"]:focus,
+input[type="search"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+input[type="email"]:focus,
+input[type="url"]:focus,
+input:not([type]):focus,
+textarea:focus,
+select:focus {
+  border-color: var(--border-color-focus, var(--glow-color, #00aaff));
+  box-shadow: 0 0 0 1px var(--glow-color, #00aaff), 0 0 14px var(--glow-color-faded, rgba(0, 170, 255, 0.28));
+  background-color: #0d121f;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted, #64748b);
+}
+
+/* Custom Dropdown Styling */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300aaff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+select option,
+select optgroup {
+  background-color: #131722;
+  color: #ffffff;
+}
+
+select optgroup {
+  background-color: #0b0f19;
+  color: var(--glow-color, #00aaff);
+  font-weight: 700;
+}
+
+/* Global Crisp Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: var(--lumin-radius-xs, 4px);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--glow-color-intense, rgba(0, 170, 255, 0.5));
+}

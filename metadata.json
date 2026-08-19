@@ -1,0 +1,12 @@
+{
+  "name": "Remix Remix Remix Remix Remix Remix Project - LUMIN - 8-19-26",
+  "description": "A high-fidelity, real-time voice AI experience with immersive 3D visuals that react to your conversation.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera",
+    "display-capture"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

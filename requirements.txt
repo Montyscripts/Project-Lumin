@@ -1,0 +1,54 @@
+# ==============================================================================
+# LUMIN AI Agent — Core Python Dependencies (v1.0.0 Release)
+# ==============================================================================
+
+# --- LLM & Agent Framework ---
+langchain>=0.3.0,<0.4.0
+langchain-core>=0.3.0,<0.4.0
+langchain-ollama>=0.2.0,<0.3.0
+langchain-community>=0.3.0,<0.4.0
+langgraph>=0.2.0,<0.3.0
+
+# --- Audio & Speech Processing ---
+SpeechRecognition>=3.10.0
+openai-whisper>=20231117
+faster-whisper>=1.0.0
+sounddevice>=0.4.6
+edge-tts>=7.2.0
+numpy>=1.26.0,<2.3.0
+
+# --- Multimodal & File Parsing ---
+pillow>=10.0.0
+pypdf>=4.0.0
+python-docx>=1.1.0
+openpyxl>=3.1.0
+python-pptx>=0.6.23
+pytesseract>=0.3.10
+pdf2image>=1.17.0
+pymupdf>=1.23.0
+rarfile>=4.2
+py7zr>=0.22.0
+
+# --- System & Automation Utilities ---
+pyperclip>=1.8.2
+psutil>=5.9.0
+requests>=2.31.0
+ddgs>=5.0
+selenium>=4.15.0
+webdriver-manager>=4.0.0
+rich>=13.0.0
+GPUtil>=1.4.0
+
+# --- Optional Advanced Extras (Generative Diffusion & Experimental Stacks) ---
+# Note: Generative image/video diffusion is optional and not part of the default LUMIN experience.
+# The default LUMIN experience operates fully via local Ollama models, Edge-TTS, and browser speech APIs.
+# To install optional local neural diffusion libraries:
+# pip install torch torchvision diffusers transformers accelerate safetensors huggingface-hub
+# # torch>=2.1.0
+# # torchvision>=0.16.0
+# # diffusers>=0.29.0
+# # transformers>=4.40.0
+# # accelerate>=0.30.0
+# # safetensors>=0.4.3
+# # huggingface-hub>=0.23.0
+

@@ -1,0 +1,162 @@
+[
+  {
+    "id": "tc_01_tool_parsing_json",
+    "category": "Tool Calling",
+    "description": "Parse structured JSON tool calls from model output",
+    "prompt": "ACTION: {\"tool\": \"read_file\", \"args\": {\"file_path\": \"README.md\"}}",
+    "expected_tool": "read_file",
+    "expected_args": {"file_path": "README.md"}
+  },
+  {
+    "id": "tc_02_tool_parsing_legacy",
+    "category": "Tool Calling",
+    "description": "Parse legacy string syntax ACTION: write_file(notes.txt)",
+    "prompt": "ACTION: write_file(notes.txt)",
+    "expected_tool": "write_file",
+    "expected_args": "notes.txt"
+  },
+  {
+    "id": "tc_03_sandboxing_path_guard",
+    "category": "Security",
+    "description": "Block unauthorized access outside workspace when unrestricted mode is off",
+    "path": "C:\\Windows\\System32\\config\\SAM",
+    "expected_allowed": false
+  },
+  {
+    "id": "tc_04_sandboxing_allowed_path",
+    "category": "Security",
+    "description": "Allow file access inside workspace directory",
+    "path": "README.md",
+    "expected_allowed": true
+  },
+  {
+    "id": "tc_05_structural_mapper_python",
+    "category": "Large-File Intelligence",
+    "description": "Extract Python AST classes, methods, and functions",
+    "file_path": "core/agent.py",
+    "expected_contains": ["STRUCTURAL MAP", "IMPORTS", "CLASSES"]
+  },
+  {
+    "id": "tc_06_chunk_retrieval_relevance",
+    "category": "Large-File Intelligence",
+    "description": "Retrieve relevant chunks without exceeding max character budget",
+    "file_path": "README.md",
+    "query": "installation setup",
+    "max_chars": 2000
+  },
+  {
+    "id": "tc_07_router_domain_coding",
+    "category": "Router Hardening",
+    "description": "Route coding requests to qwen2.5-coder or preferred coding model",
+    "task": "coding",
+    "query": "Write a python function to binary search an array",
+    "expected_domain": "coding"
+  },
+  {
+    "id": "tc_08_router_domain_vision",
+    "category": "Router Hardening",
+    "description": "Route image analysis tasks to local vision model",
+    "task": "image_analysis",
+    "query": "Describe the contents of this screenshot",
+    "expected_domain": "image_analysis"
+  },
+  {
+    "id": "tc_09_meta_command_models",
+    "category": "Meta Commands",
+    "description": "Verify /models status output contains local routing table and model list",
+    "command": "/models",
+    "expected_contains": ["LUMIN LOCAL OLLAMA ROUTING TABLE", "Installed Local Models"]
+  },
+  {
+    "id": "tc_10_meta_command_developer_mode",
+    "category": "Meta Commands",
+    "description": "Verify developer mode command triggers confirmation response",
+    "command": "developer mode",
+    "expected_contains": ["DEVELOPER MODE", "ACTIVE"]
+  },
+  {
+    "id": "tc_11_meta_command_help",
+    "category": "Meta Commands",
+    "description": "Verify /help command lists administrative commands",
+    "command": "help",
+    "expected_contains": ["LUMIN META COMMAND MANAGER", "status", "models"]
+  },
+  {
+    "id": "tc_12_intent_classification_literal",
+    "category": "Writing Automation",
+    "description": "Classify literal typing intent vs generative composition",
+    "query": "Type 'Hello world' into Notepad",
+    "expected_type": "LITERAL",
+    "expected_literal": "Hello world"
+  },
+  {
+    "id": "tc_13_intent_classification_generative",
+    "category": "Writing Automation",
+    "description": "Classify generative paragraph creation request",
+    "query": "Write 5 paragraphs about quantum physics in Word",
+    "expected_type": "GENERATIVE",
+    "expected_paras": 5
+  },
+  {
+    "id": "tc_14_memory_fact_store_and_retrieve",
+    "category": "Memory System",
+    "description": "Store and recall long-term facts across sessions",
+    "fact": "User prefers dark theme and Python for scripts",
+    "expected_recall": "dark theme"
+  },
+  {
+    "id": "tc_15_audit_log_verification",
+    "category": "Production Hygiene",
+    "description": "Verify tool operations write structured logs to audit_log.jsonl",
+    "action": "test_eval_action",
+    "expected_logged": true
+  },
+  {
+    "id": "tc_16_project_indexer",
+    "category": "Large-File Intelligence",
+    "description": "Index project directory files and structural summaries",
+    "dir_path": ".",
+    "expected_min_files": 5
+  },
+  {
+    "id": "tc_17_multi_file_comparison",
+    "category": "Multi-File Intelligence",
+    "description": "Cross-file differential, structural, and similarity analysis",
+    "file1": "README.md",
+    "file2": "agent_config.example.json",
+    "expected_contains": ["CROSS-FILE COMPARISON REPORT", "Similarity Index"]
+  },
+  {
+    "id": "tc_18_multi_step_direct_command",
+    "category": "Multi-Step Workflows",
+    "description": "Multi-step chained desktop command execution",
+    "query": "open YouTube, search for Gorillaz, then open Gmail",
+    "expected_contains": ["Multi-Step Agent Chain Executed Successfully", "Step 1", "Step 2"]
+  },
+  {
+    "id": "tc_19_page_content_extraction",
+    "category": "Web Automation & Extraction",
+    "description": "Extract main heading and first paragraph without triggering fake product rankings",
+    "query": "Go to reddit.com and tell me the main heading and the first paragraph",
+    "expected_contains": ["Main Heading", "First Paragraph"],
+    "forbidden_contains": ["Deep Web Research", "Top 10", "Product Link", "Item / Option Name"]
+  },
+  {
+    "id": "tc_20_gmail_draft_multistep",
+    "category": "Multi-Step Workflows",
+    "description": "Full multi-step YouTube search and Gmail draft composition",
+    "query": "Open YouTube, search for lofi hip hop, then open Gmail and start a new draft saying 'Testing LUMIN automation'",
+    "expected_contains": ["Multi-Step Agent Chain Executed Successfully", "YouTube", "Gmail", "Testing LUMIN automation"],
+    "forbidden_contains": ["Deep Web Research", "Top 10"]
+  },
+  {
+    "id": "tc_21_file_comparison_query_routing",
+    "category": "Multi-File Intelligence",
+    "description": "Attached file comparison routing without product ranking hallucination",
+    "file1": "README.md",
+    "file2": "agent_config.example.json",
+    "query": "Compare these two files and show me the important differences.",
+    "expected_contains": ["CROSS-FILE COMPARISON REPORT", "Similarity Index"],
+    "forbidden_contains": ["Deep Web Research", "Top 10", "Item / Option Name", "Best Choice"]
+  }
+]

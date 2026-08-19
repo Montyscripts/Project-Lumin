@@ -1,0 +1,68 @@
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Node dependencies and build output
+node_modules/
+dist/
+dist-ssr/
+*.local
+.env
+.env.local
+.env.*.local
+
+# Editor & OS directories
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Python runtime & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Agent local state & transient buffers
+LUMIN_*.bat
+tts_cache/
+screenshots/
+uploads/
+.backups/
+agent_memory.json
+agent_memory.json.tmp
+*.tmp
+agent_config.json
+router_learning.json
+.auto_launch_wake
+.auto_stop_sleep
+.agent_lock
+driver.log
+lumin.log
+audit_log.jsonl
+install_log.txt
+setup_log_*.txt
+.deps_installed.flag
+*.wav
+*.mp3
+
+# Docker & build temporary files
+.docker/

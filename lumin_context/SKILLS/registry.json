@@ -1,0 +1,57 @@
+[
+  {
+    "id": "morning_brief",
+    "name": "Morning Brief",
+    "description": "Compiles an actionable morning briefing: calendar date & time, system status, active model health, durable memory priorities, and recommended focus tasks.",
+    "category": "Daily Routines",
+    "icon": "☀️",
+    "triggerHints": ["morning brief", "run morning brief", "daily briefing", "morning briefing", "start my day"],
+    "requiredTools": ["context_memory", "system_clock", "status_monitor"],
+    "instructions": "Generate an executive Morning Briefing tailored to the user.\n1. Greet the user by name (from USER.md) with energetic, professional composure.\n2. State current Date and Time clearly.\n3. System & Model Status: Report active neural engine, access level, and runtime health.\n4. Memory & Priority Highlights: Extract top active projects and commitments from MEMORY.md.\n5. Action Plan: Suggest 3 prioritized, high-leverage focus items for today.",
+    "isEnabled": true
+  },
+  {
+    "id": "daily_status",
+    "name": "Daily Status & Workflow Check",
+    "description": "Audits current agent runtime, active cognitive pipeline, memory store status, connected MCP tools, and pending workflows.",
+    "category": "System & Dev",
+    "icon": "📊",
+    "triggerHints": ["daily status", "workflow check", "run daily status", "agent status check", "system status check"],
+    "requiredTools": ["runtime_harness", "mcp_registry", "memory_manager"],
+    "instructions": "Perform an operational status and workflow check.\n1. Active Cognitive Model & Platform Engine status.\n2. Context Layer Status: Confirm USER.md, IDENTITY.md, RULES.md, and MEMORY.md are synced.\n3. Capabilities & MCP status.\n4. Access Level & Sandboxing posture.\n5. Provide a crisp 1-sentence readiness summary.",
+    "isEnabled": true
+  },
+  {
+    "id": "system_diagnostics",
+    "name": "System Diagnostics Report",
+    "description": "Comprehensive audit of WebGL 2.0 3D GPU acceleration, WebAudio 48kHz synthesis pipeline, memory footprint, access policy, and LLM latency.",
+    "category": "System & Dev",
+    "icon": "⚡",
+    "triggerHints": ["diagnostics report", "run diagnostics", "system diagnostics", "hardware telemetry report", "audit system"],
+    "requiredTools": ["webgl_telemetry", "webaudio_analyser", "hardware_probe", "access_governor"],
+    "instructions": "Compile a technical System Diagnostics & Telemetry Report.\n1. Hardware & Acceleration: WebGL 2.0 renderer profile, frame target (60 FPS), GPU state.\n2. Audio & Speech: WebAudio 48kHz pipeline, active TTS voice engine, STT state.\n3. Memory & Runtime: Sandbox memory footprint, active process bridge.\n4. Access Policy: Explicitly confirm if runtime is SANDBOXED or UNRESTRICTED.\n5. Overall Health: State whether all subsystems are nominal.",
+    "isEnabled": true
+  },
+  {
+    "id": "deep_research",
+    "name": "Deep Research & Synthesis",
+    "description": "Applies a structured multi-phase research framework to break down complex engineering topics or questions into Hypothesis, Findings, Trade-offs, and Actionable Steps.",
+    "category": "Research & Analysis",
+    "icon": "🔬",
+    "triggerHints": ["deep research", "research topic", "synthesize topic", "analyze problem", "run research"],
+    "requiredTools": ["reasoning_engine", "document_synthesis", "markdown_formatter"],
+    "instructions": "Execute a structured Deep Research & Synthesis workflow on the user's topic.\n1. Problem Decomposition & Core Hypothesis.\n2. Technical Findings & Architectural Approaches.\n3. Trade-off Matrix (Performance vs Complexity vs Maintainability).\n4. Direct Recommendation & Next Actionable Steps.",
+    "isEnabled": true
+  },
+  {
+    "id": "ambient_architect",
+    "name": "3D Visualizer & Ambient Architect",
+    "description": "Inspects visualizer geometry, theme colorways, post-processing shaders, and audio reactivity, then tunes or recommends scene presets.",
+    "category": "Creative & Ambient",
+    "icon": "🪐",
+    "triggerHints": ["ambient architect", "visualizer tune", "optimize visualizer", "recommend theme", "ambient scene"],
+    "requiredTools": ["visualizer_controller", "shader_pipeline", "theme_matrix"],
+    "instructions": "Analyze and architect the ambient visualizer environment.\n1. Current Geometry & Shape profile.\n2. Color Palette & Lighting harmony.\n3. Post-Processing & Shader synergy (bloom, afterimage trails, mercury fluid, chromatic aberration).\n4. Recommend or apply curated signature presets.",
+    "isEnabled": true
+  }
+]
