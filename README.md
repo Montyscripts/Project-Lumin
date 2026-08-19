@@ -16,14 +16,14 @@
 [![Node.js: 20+](https://img.shields.io/badge/Node.js-20+-339933.svg?logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Ollama: Local Inference](https://img.shields.io/badge/Ollama-Local--First-black.svg?logo=ollama&logoColor=white)](https://ollama.com)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Experimental-7057ff.svg)](#-model-context-protocol-dual-mcp-engine)
+[![Platform: Windows | Linux | macOS | Docker](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Docker-blueviolet.svg)](#-quick-start)
 
 **Lumin is an early-stage experiment in building a fully local AI desktop companion.**  
-It combines continuous voice interaction, a real-time 3D audio-reactive visualizer, local LLM routing via Ollama, a simple context/skills system, and basic coding + desktop tools.
+It pairs a real-time 3D audio-reactive sphere with voice interaction, local LLM orchestration via Ollama, coding tools, and dual Model Context Protocol (MCP) support.
 
-> **Current status**: Early prototype.  
-> Many features work on the author’s machine. Reliability, cross-platform support, and polish are still limited. This is not a production-ready product.
+> **Current status**: Early prototype. Many features work on the author’s machine. Cross-platform reliability and polish are still limited. This is not a production-ready product.
 
-[Quick Start](#-quick-start) • [Current Capabilities](#-current-capabilities) • [Workspace Modes](#-workspace-modes) • [MCP Support](#-model-context-protocol-dual-mcp-engine) • [Architecture](#-system-architecture) • [Roadmap](#-roadmap--current-status) • [Contributing](CONTRIBUTING.md)
+[Quick Start](#-quick-start) • [Current Capabilities](#-current-capabilities) • [Interface & Modes](#-workspace-modes) • [Dual MCP Engine](#-model-context-protocol-dual-mcp-engine) • [System Architecture](#-system-architecture) • [Roadmap](#-roadmap--current-status) • [Contributing](CONTRIBUTING.md)
 
 ---
 </div>
@@ -32,41 +32,40 @@ It combines continuous voice interaction, a real-time 3D audio-reactive visualiz
   <img src="assets/lumin-demo.gif" alt="LUMIN Demo" width="900">
 </div>
 
-## Why this project exists
+## 💡 Why Lumin?
 
-Most voice assistants and coding agents rely on cloud APIs. Lumin explores what is possible when everything runs locally:
+Most voice assistants rely on continuous cloud telemetry, high-latency API roundtrips, and disconnected command shells. Lumin explores what is possible when everything runs locally for developers who value privacy and desktop control:
 
-- Voice input and output
-- A reactive 3D visual interface
-- Task-aware routing across local models
-- File-backed context and reusable skills
-- Basic tool use and MCP interoperability
-
-The project prioritizes privacy and local control over polish and reliability (for now).
-
----
-
-## Current Capabilities
-
-| Area                              | Status          | Notes |
-|-----------------------------------|-----------------|-------|
-| Local Ollama model routing        | Working         | Routes coding / vision / general queries to different models |
-| 3D audio-reactive visualizer      | Working         | Three.js + GLSL sphere that reacts to mic and TTS |
-| Voice pipeline (STT + Edge-TTS)   | Working         | Functional under good conditions; still fragile |
-| Markdown context workspace        | Working         | `USER.md`, `IDENTITY.md`, `RULES.md`, `MEMORY.md` |
-| Skills registry                   | Working         | Basic reusable capability packs |
-| File / document tools             | Working         | PDF, DOCX, XLSX, PPTX, ZIP support exists |
-| Terminal / shell tools            | Working         | Basic execution and streaming |
-| MCP server (basic tools)          | Experimental    | JSON-RPC 2.0 implementation present |
-| Continuous duplex voice           | Fragile         | Works in ideal conditions; echo and turn-taking issues remain |
-| Cross-platform reliability        | Limited         | Primarily validated on the author’s Windows setup |
-| Large-scale coding agent features | Early           | AST extraction and multi-file editing are still rough |
+1. **Local-First Engine** — Runs via Ollama with dynamic model routing (`qwen2.5-coder`, `llama3.2`, `phi4-mini`, `gemma3`, `minicpm-v`). No required cloud API keys and no data leaving your machine by default.
+2. **Audio-Reactive 3D Visualizer** — A Three.js GLSL vertex-deformed sphere with custom fragment shaders and bloom post-processing that responds to microphone input and TTS audio streams.
+3. **Voice Pipeline** — Conversational voice with STT, Edge-TTS neural speech, and basic feedback handling during playback. Continuous duplex mode exists but is still fragile.
+4. **First-Class Context Workspace** — File-backed markdown store (`lumin_context/USER.md`, `IDENTITY.md`, `RULES.md`, `MEMORY.md`) injected into reasoning cycles.
+5. **Reusable Skills Registry** — Structured capability packs with natural-language and 1-click style triggers (Morning Brief, Daily Status, Diagnostics, Research, and custom packs).
+6. **Developer & Coding Tools** — File editing, basic AST structural extraction, shell execution, and live terminal streaming. Advanced autonomous coding features are still early.
+7. **Dual MCP Engine** — Experimental JSON-RPC 2.0 implementation that can act as both an MCP server (exposing local tools) and an MCP client.
 
 ---
 
-## Workspace Modes
+## ⚡ Current Capabilities
 
-Lumin currently offers three main modes plus a full-screen visualizer mode:
+| Capability                        | Current Status     | Description                                                                 |
+|-----------------------------------|--------------------|-----------------------------------------------------------------------------|
+| **Local-First Voice Agent**       | Working            | Microphone STT + Edge-TTS with caching. Continuous duplex mode works under good conditions but remains fragile. |
+| **3D Audio-Reactive Visualizer**  | Working            | Three.js WebGL canvas with GLSL audio-reactive sphere, particles, lighting, and bloom. |
+| **Ollama Auto-Router**            | Working            | Task-based routing to different local models for coding, vision, documents, and general chat. |
+| **First-Class Context Layer**     | Working            | Persistent markdown workspace (`USER.md`, `IDENTITY.md`, `RULES.md`, `MEMORY.md`) with disk sync. |
+| **Skills System**                 | Working            | Reusable capability packs with natural-language and simple triggers. |
+| **Tool Registry**                 | Working            | File I/O, basic AST mapping, terminal execution, and simple browser tools. |
+| **Live Terminal & Dev Console**   | Working            | Real-time WebSocket terminal streaming and subprocess management. |
+| **Dual MCP Engine**               | Experimental       | JSON-RPC 2.0 server + client implementation. Functional but not yet hardened. |
+| **Universal File & Doc Parser**   | Working            | Extraction support for PDF, DOCX, XLSX, PPTX, text files, and ZIP archives. |
+| **Cross-platform reliability**    | Limited            | Primarily validated on the author’s Windows setup. Expect rough edges elsewhere. |
+
+---
+
+## 🖥️ Workspace Modes
+
+Lumin provides three primary workspace modes plus an ambient presentation mode:
 
 ```
 +-----------------------------------------------------------------------------------------------+
@@ -74,195 +73,253 @@ Lumin currently offers three main modes plus a full-screen visualizer mode:
 |  - 3D sphere center    |  - Split workspace    |  - Context & Skills Workspace                |
 |  - Real-time audio FFT |  - Chat & task stream |  - Voice catalog & Edge-TTS                  |
 |  - Live STT transcript |  - Live Terminal logs |  - Ollama models & routing                   |
-|  - Neural voice output |  - File tools         |  - 3D shader params & MCP config             |
+|  - Neural voice output |  - File & code tools  |  - 3D shader params & MCP server config      |
 +-----------------------------------------------------------------------------------------------+
 ```
 
-- **Voice Mode** — Focused on the 3D sphere with live transcripts and hands-free interaction.
-- **Agent Mode** — Chat + terminal + basic file/code tools.
-- **Settings** — Context files, skills, voice, models, and visualizer parameters.
-- **Cinema Mode** (`Esc` / `H`) — Full-screen visualizer with UI chrome hidden.
+* **Voice Mode**: Minimalist stage centered on the 3D reactive sphere with live conversational transcripts and hands-free microphone interaction.
+* **Agent Mode**: Engineering-oriented workspace with chat history, subtask tracking, file previews, and live terminal.
+* **Settings**: Configuration for Context Workspace (`lumin_context/`), Skills Registry, voice selection, Ollama models, wake words, 3D graphics quality, and MCP servers.
+* **Cinema Mode (`Esc` / `H`)**: Ambient presentation mode that maximizes the 3D visualization and hides UI chrome.
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
-> **Python Requirement**: Use **Python 3.11, 3.12, or 3.13**. Python 3.14+ is not supported.
+> **Python Requirement**: Lumin supports **Python 3.11, 3.12, and 3.13**. Python 3.14+ is not supported (C-extension and NumPy issues).
 
-### Windows
+### 1. Windows
 
-1. Run the installer once:
+1. **First-Time Installation**  
+   Run `install_windows.bat` once:
+
    ```cmd
    install_windows.bat
    ```
 
-2. Launch the app:
+   This attempts to configure a supported Python runtime, create a virtual environment, install dependencies, and prepare Ollama.
+
+2. **Daily Launch**  
+   Double-click `start_app.bat`:
+
    ```cmd
    start_app.bat
    ```
 
-   This should open the UI at `http://localhost:3000`.
+   The application should open the UI at **`http://localhost:3000`**.
 
-   Helper scripts:
-   - `start_app_debug.bat` — foreground mode with logs
-   - `start_agent.bat` — CLI-only agent
-   - `stop_app.bat` — stop processes
+   *Helper scripts:*
+   * `start_app_debug.bat` — Foreground console mode with live logs.
+   * `start_agent.bat` — CLI-only agent runner.
+   * `stop_app.bat` — Stops Lumin processes and frees port 3000.
 
-> Note: The Windows scripts are still early. Manual setup may be required if something fails.
+> Note: The Windows scripts are still early. Manual intervention may be required if something fails.
 
-### Linux & macOS
+---
+
+### 2. Linux & macOS
+
+Ensure **Python 3.11–3.13**, **Node.js 20+**, and **Ollama** are installed.
 
 ```bash
+# 1. Clone the repository
 git clone https://github.com/Montyscripts/Project-Lumin.git
 cd Project-Lumin
 
-# Create and activate a virtual environment
+# 2. Create virtual environment and install dependencies
 python -m venv venv
 source venv/bin/activate
-
-# Install Python dependencies
 pip install -r requirements.txt
 
-# Start the agent
+# 3. Start the agent
 python agent.py
 
-# In a separate terminal
+# 4. In a separate terminal, launch the web application
 npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000` in a modern browser.
 
-### Docker (early)
+---
+
+### 3. Docker & Docker Compose (Early)
 
 ```bash
+# Start full stack (Web app + Python backend + Ollama)
 docker-compose up -d
+
+# View live agent logs
 docker-compose logs -f lumin-agent
 ```
 
-Access at `http://localhost:3000`. GPU passthrough is experimental.
+Access the web interface at `http://localhost:3000`.
+
+> **GPU Passthrough**: For NVIDIA CUDA acceleration, uncomment the relevant block in `docker-compose.yml`. This path is still experimental.
 
 ---
 
-## Model Context Protocol (Dual MCP)
+## 🔌 Model Context Protocol (Dual MCP Engine)
 
 Lumin includes an experimental dual MCP implementation (JSON-RPC 2.0):
 
-- **MCP Server** — Exposes local tools so external hosts (Claude Desktop, Cursor, etc.) can call them.
-- **MCP Client** — Can connect to external MCP servers.
-
-Example server configuration for Claude Desktop / Cursor:
-
-```json
-{
-  "mcpServers": {
-    "lumin": {
-      "command": "python",
-      "args": ["-m", "tools.mcp_server"],
-      "cwd": "/path/to/Project-Lumin"
-    }
-  }
-}
+```
+                       ┌─────────────────────────┐
+                       │   External MCP Hosts    │
+                       │ Claude Desktop / Cursor │
+                       └────────────┬────────────┘
+                                    │ (JSON-RPC 2.0 stdio/SSE)
+                                    ▼
+                         ╔═════════════════════╗
+                         ║   LUMIN MCP SERVER  ║
+                         ║  Exposes Desktop    ║
+                         ║  Tools & Ollama LLM ║
+                         ╠═════════════════════╣
+                         ║   LUMIN MCP CLIENT  ║
+                         ║  Consumes Remote    ║
+                         ║  APIs & Toolsets    ║
+                         ╚══════════╤══════════╝
+                                    │
+                                    ▼
+                       ┌─────────────────────────┐
+                       │  External MCP Services  │
+                       │  GitHub, SQLite, APIs   │
+                       └─────────────────────────┘
 ```
 
-External servers can be configured in `external_mcp_servers.json` or via the Settings UI.  
-This part of the system is still early and not fully hardened.
+* **Run Lumin as an MCP Server** for Claude Desktop or Cursor:
+
+  ```json
+  {
+    "mcpServers": {
+      "lumin": {
+        "command": "python",
+        "args": ["-m", "tools.mcp_server"],
+        "cwd": "/path/to/Project-Lumin"
+      }
+    }
+  }
+  ```
+
+* **Connect Lumin to External MCP Servers**: Configure connections in `external_mcp_servers.json` or through the Settings panel.
+
+This part of the system is functional but still early and not fully hardened for production use.
 
 ---
 
-## System Architecture
+## 🏗️ System Architecture (The 4 Pillars)
 
 ```
 Project-Lumin/
-├── lumin_context/            # Context workspace (markdown)
-│   ├── USER.md
-│   ├── IDENTITY.md
-│   ├── RULES.md
-│   ├── MEMORY.md
+├── lumin_context/            # Pillar 2: First-Class Context Workspace
+│   ├── USER.md               # User identity, technical background & goals
+│   ├── IDENTITY.md           # Lumin tone, persona & behavioral directives
+│   ├── RULES.md              # Operational boundaries, safety & output rules
+│   ├── MEMORY.md             # Durable facts & persistent knowledge
 │   └── SKILLS/
-│       └── registry.json
-├── core/                     # Agent runtime
-│   ├── agent.py              # Main orchestration
-│   ├── router.py             # Intent + model routing
-│   ├── runtime_context.py
-│   ├── resource_governor.py
-│   ├── capabilities.py
-│   └── writing.py
-├── llm/
-│   └── client.py             # Ollama client
+│       └── registry.json     # Pillar 3: Registered reusable capability packs
+├── core/                     # Pillar 4: Runtime Harness & Execution Loop
+│   ├── agent.py              # Orchestration loop, state machine & routing
+│   ├── router.py             # Task-based intent router & model selector
+│   ├── runtime_context.py    # Dynamic prompt context injection
+│   ├── resource_governor.py  # Sandboxing policy & resource monitor
+│   ├── capabilities.py       # Capability registry & diagnostics
+│   └── writing.py            # Longform text & structured documentation
+├── llm/                      # Pillar 1: Model Brain & Inference
+│   └── client.py             # Ollama local inference client
 ├── audio/
-│   ├── tts_cache.py          # Edge-TTS + cache
-│   └── local_tts.py
+│   ├── tts_cache.py          # Edge-TTS voice synthesizer with LRU cache
+│   └── local_tts.py          # Local fallback speech synthesis
 ├── memory/
-│   └── manager.py
+│   └── manager.py            # Ephemeral session context & semantic memory
 ├── tools/
-│   ├── registry.py           # File, shell, browser tools
-│   ├── mcp_server.py
-│   └── mcp_client.py
-├── src/                      # Frontend (Lit + Three.js)
-│   ├── main.tsx
-│   ├── visual-3d.tsx
-│   └── ...
-├── server.js                 # Node API + WebSocket bridge
+│   ├── registry.py           # Core tools: File I/O, Selenium, Shell & AST
+│   ├── mcp_server.py         # JSON-RPC 2.0 MCP Server implementation
+│   └── mcp_client.py         # MCP Client for remote tool integration
+├── src/
+│   ├── main.tsx              # Lit reactive single-page application
+│   ├── visual-3d.tsx         # Three.js 3D sphere canvas with GLSL shaders
+│   ├── backdrop-shader.ts    # Raymarched ambient backdrop shader
+│   ├── services/
+│   │   ├── context-manager.ts
+│   │   ├── skills-manager.ts
+│   │   ├── settings-manager.ts
+│   │   └── agent-websocket.ts
+│   └── components/
+│       ├── chat-message-list.ts
+│       ├── terminal-panel.ts
+│       ├── visualizer-controls.ts
+│       ├── model-selector.ts
+│       ├── status-bar.ts
+│       └── settings/
+├── server.js                 # Node.js API server & WebSocket bridge
+├── docs/                     # Architecture, commands, troubleshooting
 ├── docker-compose.yml
 └── package.json
 ```
 
 ---
 
-## Hardware Guidance (approximate)
+## 💻 Hardware & Local Inference Guidance
 
-| Hardware Tier         | Memory   | GPU / VRAM     | Suggested Models                  | Realistic Use Cases                     |
-|-----------------------|----------|----------------|-----------------------------------|-----------------------------------------|
-| Laptop / Entry        | 8–16 GB  | CPU / iGPU     | `llama3.2:3b`, `phi4-mini`        | Basic voice chat, simple tasks          |
-| Mid-range Desktop     | 16–32 GB | 6–10 GB VRAM   | `qwen2.5-coder:7b` + smaller models | Coding help, document work, research   |
-| Higher-end            | 32+ GB   | 12+ GB VRAM    | Larger coder + vision models      | Heavier multimodal and agent workloads  |
+| Hardware Tier         | Memory   | GPU / VRAM          | Recommended Models & Workflows              | Realistic Capabilities                              |
+|-----------------------|----------|---------------------|---------------------------------------------|-----------------------------------------------------|
+| **Laptop / Entry**    | 8–16 GB  | CPU Only / Integrated | `llama3.2:3b`, `phi4-mini`                  | Basic voice conversation, simple shell tasks        |
+| **Mid-Range Desktop** | 16–32 GB | 6–10 GB VRAM        | `qwen2.5-coder:7b`, `llama3.2:3b`           | Coding help, document work, research                |
+| **Enthusiast**        | 32–64 GB | 12–16 GB VRAM       | `qwen2.5-coder:14b`, `minicpm-v:8b`         | Heavier multimodal and agent workloads              |
+| **Workstation**       | 64+ GB   | 24+ GB VRAM         | Larger coder + vision models                | More ambitious multi-step agent pipelines           |
 
-Results will vary significantly based on model size, quantization, and system load.
-
----
-
-## Roadmap & Current Status
-
-**Working / mostly working**
-- [x] Task-based Ollama model routing
-- [x] Markdown context workspace
-- [x] Basic skills system
-- [x] 3D audio-reactive visualizer
-- [x] Core voice pipeline (STT + Edge-TTS)
-- [x] File and document tools
-- [x] Experimental dual MCP support
-
-**Still early / needs work**
-- [ ] Reliable continuous duplex voice (echo cancellation, barge-in, turn-taking)
-- [ ] Robust cross-platform installation experience
-- [ ] Stronger coding agent capabilities and multi-file editing
-- [ ] Better error handling, recovery, and observability
-- [ ] Meaningful automated test coverage
-- [ ] Performance and resource usage under sustained use
-
-Near-term priority is improving reliability and install experience rather than adding many new features.
+Results vary significantly with model size, quantization, and system load.
 
 ---
 
-## Contributing
+## 🗺️ Roadmap & Current Status
+
+**Currently working / mostly working**
+* [x] Task-driven dynamic Ollama model routing
+* [x] Live markdown context workspace (`lumin_context/`)
+* [x] Basic skills system
+* [x] 3D audio-reactive GLSL visualizer
+* [x] Core voice pipeline (STT + Edge-TTS)
+* [x] File, document, and terminal tools
+* [x] Experimental dual MCP (server + client)
+
+**Still early / needs significant work**
+* [ ] Reliable continuous duplex voice (echo cancellation, barge-in, robust turn-taking)
+* [ ] Clean cross-platform installation experience
+* [ ] Stronger coding agent capabilities and multi-file editing
+* [ ] Better error handling, recovery, and observability
+* [ ] Meaningful automated test coverage
+* [ ] Performance and resource usage under sustained load
+* [ ] Local multimodal speech-to-speech
+* [ ] Native mobile / PWA companion
+
+Near-term focus is improving reliability and install experience rather than adding many new features.
+
+---
+
+## 🤝 Contributing & Community
 
 This is currently a solo experimental project. Feedback, bug reports, and focused pull requests are welcome — especially around:
 
-- Installation and platform issues
-- Voice pipeline robustness
-- Code structure and maintainability
-- Test coverage
+* Installation and platform issues
+* Voice pipeline robustness
+* Code structure and maintainability
+* Test coverage
 
-Please open an issue before large changes so direction can be discussed.
+1. Fork the repository.
+2. Create your feature branch (`git checkout -b feature/amazing-feature`).
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`).
+4. Push to the branch (`git push origin feature/amazing-feature`).
+5. Open a Pull Request.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before submitting code. Open an issue before large changes so direction can be discussed.
 
 ---
 
-## License
+## 📄 License
 
-MIT License — see [LICENSE](LICENSE).
+This project is open-source software licensed under the [**MIT License**](LICENSE).
 
 ---
 
