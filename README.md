@@ -20,7 +20,7 @@
 **LUMIN is a high-performance, privacy-first AI desktop companion that pairs a real-time 3D audio-reactive sphere with continuous voice interaction, local LLM orchestration, intelligent coding tools, and dual Model Context Protocol (MCP) support.**
 
 [Quick Start](#-quick-start) • [Working Capabilities](#-what-lumin-delivers-today) • [Interface & Modes](#-workspace-modes) • [Dual MCP Engine](#-model-context-protocol-dual-mcp-engine) • [System Architecture](#-system-architecture) • [Roadmap](#-roadmap--current-limitations) • [Contributing](CONTRIBUTING.md)
-
+---
 </div>
 
 <div align="center">
@@ -28,7 +28,7 @@
 </div>
 
 <br>
-
+---
 ## 💡 Why LUMIN?
 
 Most voice assistants rely on continuous cloud telemetry, high-latency API roundtrips, and disconnected command shells. **LUMIN is built from the ground up for developers and teams who value speed, privacy, and full desktop control:**
