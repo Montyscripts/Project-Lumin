@@ -24,7 +24,21 @@
 ---
 
 </div>
+<div align="center">
+  <video
+    src="assets/lumin-demo.mp4"
+    controls
+    autoplay
+    muted
+    loop
+    playsinline
+    width="900"
+  >
+    Your browser does not support the video tag.
+  </video>
+</div>
 
+<br>
 ## 💡 Why LUMIN?
 
 Most voice assistants rely on continuous cloud telemetry, high-latency API roundtrips, and disconnected command shells. **LUMIN is built from the ground up for developers and teams who value speed, privacy, and full desktop control:**
