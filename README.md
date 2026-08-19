@@ -24,12 +24,7 @@
 </div>
 
 <div align="center">
-  <img
-    src="https://raw.githubusercontent.com/Montyscripts/Project-Lumin/main/assets/lumin-demo.gif"
-    alt="LUMIN Demo"
-    width="900"
-    loading="eager"
-  />
+  <img src="assets/lumin-demo.gif" alt="LUMIN Demo" width="900">
 </div>
 
 <br>
