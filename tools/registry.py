@@ -15,6 +15,7 @@ import html
 import base64
 import urllib.parse
 import urllib.request
+from tools.youtube_tool import youtube_search_and_play
 from pathlib import Path
 
 logger = logging.getLogger("lumin.tools")
@@ -415,6 +416,7 @@ class ToolRegistry:
             "open_url": self.open_url,
             "search_youtube": self.search_youtube,
             "play_first_youtube_video": self.play_first_youtube_video,
+	    "youtube_search_and_play": youtube_search_and_play,
             "open_file_or_folder": self.open_file_or_folder,
             "browser_navigate": self.browser_navigate,
             "browser_click": self.browser_click,
@@ -1600,45 +1602,26 @@ class ToolRegistry:
         except Exception as e:
             return f"Failed to open URL: {e}"
 
-    def search_youtube(self, query):
-        """Searches YouTube for a given query in the browser."""
-        if not query:
-            return "Error: Search query cannot be empty."
-        encoded = urllib.parse.quote(query)
-        search_url = f"https://www.youtube.com/results?search_query={encoded}"
-        try:
-            webbrowser.open(search_url)
-            return f"Successfully opened YouTube search for '{query}': {search_url}"
-        except Exception as e:
-            return f"Failed to search YouTube: {e}"
+    def search_youtube(self, query: str) -> str:
+        """
+        Search YouTube and open the first real video (skips ads and Shorts).
+        This is the single preferred tool for any YouTube search + play request.
+        """
+        if not query or not str(query).strip():
+            return "Error: No search query provided for YouTube."
+        # Clean common multi-step pollution
+        clean_query = str(query).strip().strip('"“”')
+        return youtube_search_and_play(clean_query, play_first=True)
 
-    def play_first_youtube_video(self, query=""):
-        """Finds and automatically plays the first YouTube video result for a query."""
-        search_term = query.strip() or "lo-fi hip hop radio"
-        encoded = urllib.parse.quote(search_term)
-        search_url = f"https://www.youtube.com/results?search_query={encoded}"
-        
-        try:
-            req = urllib.request.Request(
-                search_url,
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-            )
-            with urllib.request.urlopen(req, timeout=8) as response:
-                html = response.read().decode("utf-8", errors="ignore")
-                matches = re.findall(r'/watch\?v=([a-zA-Z0-9_-]{11})', html)
-                if matches:
-                    video_id = matches[0]
-                    watch_url = f"https://www.youtube.com/watch?v={video_id}&autoplay=1"
-                    webbrowser.open(watch_url)
-                    return f"Successfully opened and playing top YouTube result for '{search_term}': {watch_url}"
-        except Exception as e:
-            logger.warning(f"YouTube direct scraping failed: {e}. Opening search URL as fallback.")
-
-        try:
-            webbrowser.open(search_url)
-            return f"Opened YouTube search results for '{search_term}': {search_url}"
-        except Exception as e:
-            return f"Failed to open YouTube: {e}"
+    def play_first_youtube_video(self, query: str = None) -> str:
+        """
+        Alias that forces the same single-tool behavior.
+        Prevents the planner from inventing extra steps.
+        """
+        if not query or not str(query).strip():
+            return "Error: No search query provided. Use search_youtube with a clear query instead."
+        clean_query = str(query).strip().strip('"“”')
+        return youtube_search_and_play(clean_query, play_first=True)
 
     def open_file_or_folder(self, path):
         """Opens a local file or folder in system explorer."""

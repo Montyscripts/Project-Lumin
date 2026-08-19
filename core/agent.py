@@ -2012,6 +2012,11 @@ class LuminAgent:
             return "LUMIN Agent session ended. Shutting down gracefully."
 
         # Multi-step chaining check:
+        # IMPORTANT: Do NOT split YouTube / video play commands
+        if ("youtube" in low or "you tube" in low) and ("search" in low or "play" in low or "click" in low or "watch" in low):
+            # Treat the whole YouTube request as ONE single intent
+            return self._execute_single_intent(clean_query)
+
         if (" then " in low or " and then " in low or "\nthen " in low) and not (low.startswith("if ") or low.startswith("when ")):
             steps = re.split(r'\s*(?:,\s*then\s+|\s+then\s+|\s+and\s+then\s+|\n+)\s*', clean_query, flags=re.IGNORECASE)
             if len(steps) > 1:
@@ -2544,37 +2549,6 @@ class LuminAgent:
         if re.search(r"\b(what\s+is\s+(my\s+)?(user\s+)?session|user\s+session\s+info(rmation)?|session\s+information)\b", low):
             return f"User session information: {self.runtime_context_manager.get_user_session_info()}."
 
-        # 3.4 YouTube Video Search & Direct Video Play (Checked FIRST before general web search and web automation)
-        if "youtube" in low or "you tube" in low or (("yt" in low or "video" in low) and ("search" in low or "play" in low or "open" in low or "watch" in low)):
-            norm_query = re.sub(r"\byou\s+tube\b", "youtube", query, flags=re.IGNORECASE)
-            norm_low = norm_query.lower()
-
-            # Check if user just wants to open YouTube homepage
-            is_just_open = bool(re.search(r"^(?:please\s+)?(?:open|launch|go\s+to|navigate\s+to|visit)\s+youtube\b$", norm_low.strip())) or norm_low.strip() in ("youtube", "open youtube", "go to youtube")
-            if is_just_open:
-                return self.tool_registry.execute_tool("open_url", "https://www.youtube.com")
-
-            # Extract search / video query term
-            raw_term = norm_query
-            raw_term = re.sub(r"^(?:please\s+)?(?:open|go\s+to|launch|navigate\s+to)?\s*youtube(?:\.com)?\s*(?:in\s+(?:a\s+)?browser)?\s*", "", raw_term, flags=re.IGNORECASE)
-            raw_term = re.sub(r"^(?:[\s,;:]|\band\b|\bthen\b)+", "", raw_term, flags=re.IGNORECASE)
-            raw_term = re.sub(r"^(?:search(?:\s+for)?|look\s+up|find|play)\s*", "", raw_term, flags=re.IGNORECASE)
-            raw_term = re.sub(r"\s+(?:on|in|via|using)\s+youtube.*$", "", raw_term, flags=re.IGNORECASE)
-
-            # Check for play / click 1st video indicators
-            should_play = any(k in norm_low for k in ("click", "play", "1st", "first", "watch", "top video", "top result", "first video", "1st video"))
-
-            # Strip trailing click/play instructions from term
-            yt_term = re.sub(r"\s*(?:and\s+)?(?:click(?:\s+on)?|play|watch|open)\s+(?:the\s+)?(?:1st|first|top)?\s*(?:video|result)?.*$", "", raw_term, flags=re.IGNORECASE).strip(' "\':!?,;')
-
-            if not yt_term or yt_term.lower() in ("youtube", "open youtube"):
-                yt_term = "Gorillaz Demon Days Era Vibe – Dark Trip-Hop AI | Psycho Mix" if "gorillaz" in norm_low else "lo-fi hip hop radio"
-
-            if should_play:
-                return self.tool_registry.execute_tool("play_first_youtube_video", yt_term)
-            else:
-                return self.tool_registry.execute_tool("search_youtube", yt_term)
-
         # 3.4.1 Multi-File Structural & Diff Comparison Handler
         is_compare_kw = any(kw in low for kw in ("compare", "difference", "diff", "vs", "versus", "changes between"))
         is_compare_file_target = any(w in low for w in ("file", "files", "document", "documents", "attached", "two", "both", "version", "[uploaded file", "multi-file intelligence", ".py", ".txt", ".json", ".csv", ".doc", ".pdf", "agent")) or bool(re.search(r"\bcompare\s+(?:these|the|two|both|files|documents|agent)\b", low))
@@ -2697,7 +2671,7 @@ class LuminAgent:
 
         # Check for direct web app launch intent (e.g. "take me to ebay", "open ebay")
         for app_name, app_url in known_web_apps:
-            if re.search(r"\b(?:open|launch|go\s+to|navigate\s+to|take\s+me\s+to|show\s+me|visit)\s+" + re.escape(app_name) + r"\b", low) and not ("and search" in low or "search for" in low) and not any(kw in low for kw in ("tell", "say", "post", "heading", "paragraph", "extract", "report", "read", "what")):
+            if re.search(r"\b(?:open|launch|go\s+to|navigate\s+to|take\s+me\s+to|show\s+me|visit)\s+" + re.escape(app_name) + r"\b", low) and not ("search" in low or "play" in low or "click" in low or "watch" in low) and not any(kw in low for kw in ("tell", "say", "post", "heading", "paragraph", "extract", "report", "read", "what")):
                 return self.tool_registry.execute_tool("open_url", app_url)
 
         # 5. Search Intent (for queries like "open Google and search for top VPNs of 2026...")
@@ -2708,7 +2682,7 @@ class LuminAgent:
             "level 1", "level 2", "level 3", "level 4", "level 5", "plan -> implement", "implement -> test",
             "broad except", "safer pattern", "trace theme", "ui -> agent", "large-file", "partial result"
         ))
-        is_search_cmd = not is_repo_task and (bool(re.search(r"\b(?:search|google|look\s+up|find)\b", low)) or low.startswith("search") or "search for" in low)
+        is_search_cmd = not is_repo_task and not ("youtube" in low or "you tube" in low) and (bool(re.search(r"\b(?:search|google|look\s+up|find)\b", low)) or low.startswith("search") or "search for" in low)
         if is_search_cmd and not ("notepad" in low or "create a word document" in low or "set a reminder" in low):
             search_query = self._extract_search_query(query)
             if "expedia" in low:
@@ -2870,14 +2844,13 @@ class LuminAgent:
         if ("process" in low or "processes" in low or "tasklist" in low) and ("list" in low or "memory" in low or "ram" in low or "top" in low or "running" in low or "most" in low or "my" in low or "show" in low):
             return self.tool_registry.execute_tool("list_processes")
 
-        # 10. Screen Capture and Descriptions
+                                # 10. Screen Capture and Descriptions
         is_negative_screenshot = any(neg in low for neg in ("do not", "don't", "dont", "without", "no screenshot", "not talk about", "never")) and ("screenshot" in low or "screen shot" in low or "screen capture" in low)
         is_explicit_screenshot_cmd = any(k in low for k in (
             "take a screenshot", "take screenshot", "capture screen", "capture the screen",
             "capture my screen", "screenshot this", "take a screen shot", "snap a screenshot",
             "grab a screenshot", "take a snapshot", "screenshot of", "screen capture"
         )) or (("screenshot" in low or "screen shot" in low) and any(v in low for v in ("take", "capture", "grab", "snap", "save", "record", "shoot")))
-
         if not is_negative_screenshot and not is_doc_analysis_query and is_explicit_screenshot_cmd:
             shot = self.tool_registry.execute_tool("take_screenshot", "live_capture")
             if "describe" in low or "see" in low or "what" in low or "look" in low:
@@ -2888,27 +2861,55 @@ class LuminAgent:
                     return f"{shot}\n\nVision Description:\n{desc}"
             return shot
 
-        # 11. YouTube autoplays and direct video playing
-        if "youtube" in low:
-            yt_term = "lo-fi hip hop radio"
-            m_term = re.search(r"youtube\s+(?:and\s+)?(?:search\s+(?:for\s+)?|look\s+up\s+|find\s+)?(.+)", low)
-            if m_term:
-                raw_term = m_term.group(1).strip()
-                yt_term = re.sub(r"\b(and\s+play\s+(the\s+)?first\s+video|play\s+the\s+first\s+video|and\s+click\s+first)\b", "", raw_term, flags=re.IGNORECASE).strip(".!? ")
-                if not yt_term:
-                    yt_term = "lo-fi hip hop radio"
+        # HARD ATOMIC YOUTUBE HANDLER (prevents multi-step invention)
+        if "youtube" in low or "you tube" in low:
+            # Normalize "you tube" → "youtube"
+            norm = re.sub(r"\byou\s+tube\b", "youtube", low, flags=re.IGNORECASE)
 
-            if "play" in low or "first video" in low:
-                return self.tool_registry.execute_tool("play_first_youtube_video", yt_term)
-            else:
-                return self.tool_registry.execute_tool("search_youtube", yt_term)
+            yt_term = None
+
+            # 1. Prefer anything after "search for / search / look up / find"
+            m1 = re.search(
+                r"(?:search\s+(?:for\s+)?|look\s+up\s+|find\s+)[\"“‘]?(.+?)[\"”’]?(?:\s+then|\s+and|\s+click|\s+play|\s+on\s+the|\s+1st|\s+first|$)",
+                norm,
+                re.IGNORECASE,
+            )
+            if m1:
+                yt_term = m1.group(1)
+
+            # 2. Fallback: everything after the word "youtube"
+            if not yt_term:
+                m2 = re.search(
+                    r"youtube\s+(?:and\s+)?(?:search\s+(?:for\s+)?|look\s+up\s+|find\s+)?(.+)",
+                    norm,
+                    re.IGNORECASE,
+                )
+                if m2:
+                    yt_term = m2.group(1)
+
+            if yt_term:
+                # Strip trailing click / play instructions
+                yt_term = re.sub(
+                    r"\b(?:then\s+)?(?:and\s+)?(?:click|play|watch|open)\s+(?:on\s+)?(?:the\s+)?(?:1st|first|top)?\s*(?:video|result)?.*$",
+                    "",
+                    yt_term,
+                    flags=re.IGNORECASE,
+                )
+                # Remove every kind of quote and leftover punctuation
+                yt_term = re.sub(r"[\"“”‘’',.!?]+", " ", yt_term)
+                yt_term = re.sub(r"\s+", " ", yt_term).strip()
+
+            # Pure "open youtube" with no search term → homepage
+            if not yt_term or yt_term.lower() in ("open", "go to", "launch", "visit", "youtube"):
+                return self.tool_registry.execute_tool("open_url", "https://www.youtube.com")
+
+            return self.tool_registry.execute_tool("search_youtube", yt_term)
 
         # 12. Desktop Applications Launching / Closing
         launch_match = re.search(r"\b(?:launch|run|open|start)\s+(chrome|firefox|edge|notepad|calculator|calc|cmd|powershell|word|excel|vscode|code|paint|spotify|explorer)\b", low)
         if launch_match and not ("search" in low or "write" in low or "note" in low):
             app = launch_match.group(1)
             return self.tool_registry.execute_tool("launch_application", app)
-
         close_match = re.search(r"\b(?:close|quit|stop|terminate|kill)\s+(chrome|firefox|edge|notepad|calculator|calc|cmd|powershell|word|excel|vscode|code|paint|spotify)\b", low)
         if close_match:
             app = close_match.group(1)
