@@ -69,3 +69,6 @@ setup_log_*.txt
 LUMIN_Update_GitHub.bat
 LUMIN_Fresh_GitHub_Uploader.bat
 LUMIN_Fix_Everything_And_Prepare_Upload.bat
+
+# Auto-added by SAFE recovery - never commit corrupt Git metadata
+.git_CORRUPT_*/
