@@ -317,6 +317,11 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_
 
 ---
 
+## 📬 Contact
+
+Questions, feedback, or issues about Lumin?  
+Email: **montyscriptsfeedback@gmail.com**
+
 ## 📄 License
 
 This project is open-source software licensed under the [**MIT License**](LICENSE).
