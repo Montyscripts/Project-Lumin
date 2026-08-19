@@ -1,75 +1,79 @@
 <!doctype html>
 <html lang="en">
 <head>
-<title>LUMIN</title>
-<link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <title>LUMIN</title>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#ffffff">
-<link rel="stylesheet" href="/src/index.css">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=block" rel="stylesheet">
-<script>
-  // Robust fetch descriptor fix for sandboxed iframe environments where fetch is getter-only on Window/Window.prototype
-  (function() {
-    try {
-      let _fetch = typeof window !== 'undefined' && window.fetch ? window.fetch.bind(window) : globalThis.fetch;
+
+  <!-- Favicon -->
+  <link rel="icon" href="/favicon.ico?v=3" type="image/x-icon">
+
+  <link rel="stylesheet" href="/src/index.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=block" rel="stylesheet">
+
+  <script>
+    // Robust fetch descriptor fix for sandboxed iframe environments where fetch is getter-only on Window/Window.prototype
+    (function() {
       try {
-        Object.defineProperty(window, 'fetch', {
-          get() {
-            return _fetch;
-          },
-          set(fn) {
-            _fetch = fn;
-          },
-          configurable: true,
-          enumerable: true
-        });
-      } catch (e) {
+        let _fetch = typeof window !== 'undefined' && window.fetch ? window.fetch.bind(window) : globalThis.fetch;
         try {
-          const proto = Object.getPrototypeOf(window);
-          if (proto) {
-            Object.defineProperty(proto, 'fetch', {
-              get() {
-                return _fetch;
-              },
-              set(fn) {
-                _fetch = fn;
-              },
-              configurable: true,
-              enumerable: true
-            });
-          }
-        } catch (e2) {}
-      }
-    } catch (err) {}
-  })();
+          Object.defineProperty(window, 'fetch', {
+            get() {
+              return _fetch;
+            },
+            set(fn) {
+              _fetch = fn;
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (e) {
+          try {
+            const proto = Object.getPrototypeOf(window);
+            if (proto) {
+              Object.defineProperty(proto, 'fetch', {
+                get() {
+                  return _fetch;
+                },
+                set(fn) {
+                  _fetch = fn;
+                },
+                configurable: true,
+                enumerable: true
+              });
+            }
+          } catch (e2) {}
+        }
+      } catch (err) {}
+    })();
 
-  globalThis.litIssuedWarnings = new Set(['dev-mode']);
+    globalThis.litIssuedWarnings = new Set(['dev-mode']);
 
-  const originalWarn = console.warn;
-  console.warn = function(...args) {
-    if (args[0] && typeof args[0] === 'string' && (args[0].includes('Lit is in dev mode') || args[0].includes('lit-html is in dev mode') || args[0].includes('in dev mode'))) return;
-    originalWarn.apply(console, args);
-  };
-  const originalDebug = console.debug;
-  console.debug = function(...args) {
-    if (args[0] && typeof args[0] === 'string' && args[0].includes('[vite]')) return;
-    originalDebug.apply(console, args);
-  };
-  const originalLog = console.log;
-  console.log = function(...args) {
-    if (args[0] && typeof args[0] === 'string' && args[0].includes('[vite]')) return;
-    if (args[0] === 'CONNECTED') return;
-    originalLog.apply(console, args);
-  };
-</script>
+    const originalWarn = console.warn;
+    console.warn = function(...args) {
+      if (args[0] && typeof args[0] === 'string' && (args[0].includes('Lit is in dev mode') || args[0].includes('lit-html is in dev mode') || args[0].includes('in dev mode'))) return;
+      originalWarn.apply(console, args);
+    };
+    const originalDebug = console.debug;
+    console.debug = function(...args) {
+      if (args[0] && typeof args[0] === 'string' && args[0].includes('[vite]')) return;
+      originalDebug.apply(console, args);
+    };
+    const originalLog = console.log;
+    console.log = function(...args) {
+      if (args[0] && typeof args[0] === 'string' && args[0].includes('[vite]')) return;
+      if (args[0] === 'CONNECTED') return;
+      originalLog.apply(console, args);
+    };
+  </script>
 </head>
 <body>
   <gdm-live-audio></gdm-live-audio>
-<script type="module" src="/src/main.tsx"></script>
+  <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
