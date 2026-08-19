@@ -320,7 +320,8 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_
 ## 📬 Contact
 
 Questions, feedback, or issues about Lumin?  
-Email: [montyscriptsfeedback@gmail.com](mailto:montyscriptsfeedback@gmail.com)
+
+**Email me:** [montyscriptsfeedback@gmail.com](https://mail.google.com/mail/?view=cm&fs=1&to=montyscriptsfeedback@gmail.com)
 
 
 ## 📄 License
