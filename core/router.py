@@ -524,6 +524,10 @@ class IntentRouter:
         return False
 
     def _is_file_task(self, low: str, raw: str) -> bool:
+        # Conversation-summary requests must never be classified as FILE_TASK
+        if self.agent and hasattr(self.agent, "_is_conversation_summary_request"):
+            if self.agent._is_conversation_summary_request(raw) or self.agent._is_conversation_summary_request(low):
+                return False
 	# Never treat "important / key / main files in this project" as a document task
         if any(phrase in low for phrase in (
             "important files", "most important files", "key files", "main files",

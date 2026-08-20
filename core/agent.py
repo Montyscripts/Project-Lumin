@@ -1082,7 +1082,7 @@ class LuminAgent:
         )
         
         if any(kw in low for kw in doc_analysis_phrases) or (has_doc_ext and any(w in low for w in ("summarize", "analyze", "read", "explain", "compare", "what", "overview", "file", "document", "archive", "contents"))) or (has_session_uploads and (any(term in low for term in spreadsheet_doc_terms) or any(w in low for w in ("archive", "documents", "document", "files", "file", "text", "inside", "contents", "say", "says", "list", "show", "who", "which", "how many", "count", "average", "total", "highest", "lowest", "filter")))):
-            return "document_analysis"
+            return "document_analysis"  # note: conversation-summary already filtered earlier
 
         # Check UNCENSORED & Sensitive / Avoided / Edgy topics AFTER explicit code and document checks
         if any(kw in low for kw in UNCENSORED_KEYWORDS):
@@ -3345,6 +3345,109 @@ class LuminAgent:
 
         return bool(has_analysis and has_write)
 
+
+    def _is_conversation_summary_request(self, query: str) -> bool:
+        """
+        Detects that the user is asking for a summary/recap of the *actual conversation history*
+        between user and agent, not of a document, file, or workspace content.
+        Supports natural variations and optional persona/style modifiers.
+        """
+        if not query or not query.strip():
+            return False
+        low = query.lower().strip()
+
+        # Strong conversation anchors
+        conversation_anchors = (
+            "our conversation", "the conversation", "this conversation",
+            "our chat", "the chat", "this chat", "our discussion", "the discussion",
+            "everything we've talked about", "everything we have talked about",
+            "everything we've discussed", "everything we have discussed",
+            "what we've talked about", "what we have talked about",
+            "what we've discussed", "what we have discussed",
+            "what did we talk about", "what did we discuss",
+            "what have we talked about", "what have we discussed",
+            "what we talked about", "what we discussed",
+            "our entire conversation", "the entire conversation",
+            "entire conversation so far", "conversation so far",
+            "chat so far", "discussion so far",
+            "all of our conversation", "all we've talked about",
+            "recap our conversation", "recap the conversation",
+            "recap everything", "summarize our conversation",
+            "summarize the conversation", "summarize everything we've",
+            "summarize everything we have", "give me a summary of our",
+            "give me a recap of our", "tell me everything we've talked",
+            "tell me what we've discussed", "talk about the entire conversation",
+        )
+
+        # Generic summary/recap verbs
+        summary_verbs = (
+            "summarize", "summarise", "summary", "recap", "recapitulate",
+            "overview of", "what have we", "what did we", "what we've", "what we have",
+        )
+
+        has_conversation_anchor = any(a in low for a in conversation_anchors)
+        has_summary_verb = any(v in low for v in summary_verbs)
+
+        # Explicit document/file signals that should *block* conversation-summary routing
+        doc_blockers = (
+            "this document", "the document", "this file", "the file",
+            "this pdf", "the pdf", "uploaded document", "uploaded file",
+            "this spreadsheet", "the spreadsheet", "this archive", "the archive",
+            "these files", "these documents", "inside the archive", "what's inside",
+            "what is inside", "document analysis", "file analysis",
+            "summarize this document", "summarize the document",
+            "summarize this file", "summarize the file",
+            "analyze this document", "analyze the document",
+            "analyze this file", "analyze the file",
+        )
+        has_doc_blocker = any(b in low for b in doc_blockers)
+
+        if has_doc_blocker:
+            return False
+
+        # Positive match
+        if has_conversation_anchor:
+            return True
+        if has_summary_verb and any(w in low for w in (
+            "conversation", "chat", "discussion", "talked", "discussed",
+            "we've", "we have", "we did", "so far", "entire", "everything"
+        )):
+            return True
+
+        pure_forms = (
+            "summarize our conversation", "recap our conversation",
+            "summarize the conversation", "recap the conversation",
+            "what have we discussed", "what did we talk about",
+            "recap everything", "summarize everything",
+        )
+        if any(p in low for p in pure_forms):
+            return True
+
+        return False
+
+    def _extract_persona_or_style(self, query: str):
+        """
+        Extracts an optional persona/style request (e.g. 'like a pirate', 'as a teacher').
+        Returns the style fragment or None. Does not alter factual content.
+        """
+        if not query:
+            return None
+        low = query.lower()
+        patterns = [
+            r"(?:like|as)\s+(?:a|an)\s+([a-z0-9\s\-']+?)(?:\.|\,|$|but|and|please)",
+            r"in the style of\s+([a-z0-9\s\-']+?)(?:\.|\,|$|but|and|please)",
+            r"as if you were\s+(?:a|an)?\s*([a-z0-9\s\-']+?)(?:\.|\,|$|but|and|please)",
+            r"(?:talk|speak|respond|answer)\s+(?:like|as)\s+(?:a|an)?\s*([a-z0-9\s\-']+?)(?:\.|\,|$)",
+        ]
+        for pat in patterns:
+            m = re.search(pat, low)
+            if m:
+                style = m.group(1).strip(" .")
+                if style and len(style) < 60 and style not in ("summary", "recap", "conversation", "chat"):
+                    return style
+        return None
+
+
     def _handle_analyze_and_write_file(self, query: str, extracted_text: Optional[str] = None) -> str:
         """
         Executes the combined multi-step document analysis and file writing workflow:
@@ -3842,7 +3945,11 @@ class LuminAgent:
             return self._analyze_file_impl(target_local_file)
 
         has_session_uploads = bool(hasattr(self, "upload_pipeline") and self.upload_pipeline and (self.upload_pipeline.metadata_store or getattr(self, "last_analyzed_file", None)))
-        is_doc_analysis = bool(target_local_file) or self.intent_router._is_file_task(low, query) or any(kw in low for kw in (
+        # Conversation-summary requests must never be treated as document analysis
+        if self._is_conversation_summary_request(query) or self._is_conversation_summary_request(low):
+            is_doc_analysis = False
+        else:
+            is_doc_analysis = bool(target_local_file) or self.intent_router._is_file_task(low, query) or any(kw in low for kw in (
             "summarize", "summary", "analyze file", "analyze document", "what does this say",
             "what does it say", "what's in", "what is in", "compare files", "compare documents",
             "compare these", "explain file", "explain document", "document analysis", "file analysis",
@@ -5442,9 +5549,148 @@ class LuminAgent:
             print(f"Agent Response: {app_cmd_output}")
             flush_stdout()
             self.play_speech_response(app_cmd_output)
+            # Always store in conversation history so summaries stay complete
+            try:
+                self.memory_manager.add_context("user", original_user_query)
+                self.memory_manager.add_context("ai", str(app_cmd_output))
+            except Exception:
+                pass
             return app_cmd_output
 
+        # ------------------------------------------------------------------
+        # CONVERSATION-SUMMARY REQUESTS (highest priority after app commands)
+        # Must summarize the real dialogue history, never document/workspace content.
+        # ------------------------------------------------------------------
+        if self._is_conversation_summary_request(original_user_query):
+            # Build history explicitly from short_term_context (most reliable)
+            turns = []
+            if hasattr(self.memory_manager, "short_term_context") and self.memory_manager.short_term_context:
+                for m in self.memory_manager.short_term_context:
+                    speaker = str(m.get("speaker", "unknown")).upper()
+                    text = str(m.get("text", "")).strip()
+                    if text:
+                        turns.append(f"{speaker}: {text}")
+
+            # Also include any compressed summary if present
+            running_summary = getattr(self.memory_manager, "summary", "") or ""
+
+            if not turns and not running_summary.strip():
+                empty_msg = (
+                    "There is no conversation history available to summarize yet. "
+                    "Once we have talked for a bit, ask me again and I will give you a faithful recap."
+                )
+                print(f"Agent Response: {empty_msg}")
+                flush_stdout()
+                self.play_speech_response(empty_msg)
+                try:
+                    self.memory_manager.add_context("user", original_user_query)
+                    self.memory_manager.add_context("ai", empty_msg)
+                except Exception:
+                    pass
+                return empty_msg
+
+            history_lines = []
+            if running_summary.strip():
+                history_lines.append("[EARLIER SUMMARY]: " + running_summary.strip())
+            if turns:
+                history_lines.append("[DIALOGUE TURNS]:")
+                history_lines.extend(turns)
+            history_context = "\n".join(history_lines)
+
+            persona = self._extract_persona_or_style(original_user_query)
+            style_instruction = ""
+            if persona:
+                style_instruction = (
+                    f"\n\nPRESENTATION STYLE (persona only – do NOT change any facts):\n"
+                    f"Respond entirely in the voice/style of: {persona}. "
+                    f"Keep every factual detail 100% faithful to the conversation history below. "
+                    f"Do not invent, omit, or substitute any information."
+                )
+
+            system_extension = (
+                "=== CONVERSATION HISTORY SUMMARY (STRICT – HIGHEST PRIORITY) ===\n"
+                "The user is asking for a summary/recap of the *actual conversation history* "
+                "between the user and you (LUMIN).\n\n"
+                "HARD RULES – NEVER VIOLATE:\n"
+                "1. Base the summary EXCLUSIVELY on the dialogue turns listed below.\n"
+                "2. You MUST cover EVERY major topic that appears in the dialogue turns "
+                "(identity questions, file listings, browser actions, document analysis, etc.).\n"
+                "3. NEVER invent facts. NEVER pull content from documents, PDFs, workspace files, "
+                "or external knowledge that was not explicitly stated in the dialogue turns.\n"
+                "4. If a document/PDF was discussed, mention that it was analyzed and the high-level "
+                "outcome, but do NOT replace the entire summary with only the document content.\n"
+                "5. If a persona/style was requested, apply it ONLY to presentation/tone; "
+                "the underlying facts remain identical.\n"
+                "6. Prefer a clear bullet list when the user asks for bullets or a short recap.\n"
+                f"{style_instruction}"
+            )
+
+            self.local_models = self._fetch_local_models()
+            active_model = getattr(self, "force_model", None) or getattr(self, "active_model", None) or "llama3.2:3b"
+            preferred = ("qwen2.5:7b", "phi4-mini", "llama3.2:3b", "gemma3:4b", "mistral:7b")
+            for cand in preferred:
+                for inst in (self.local_models or []):
+                    if cand == inst or inst.startswith(cand) or cand in inst:
+                        active_model = inst
+                        break
+                else:
+                    continue
+                break
+
+            user_prompt = (
+                "Below is the complete conversation history between the user and LUMIN.\n"
+                "Summarize it faithfully according to the user's request.\n\n"
+                f"{history_context}\n\n"
+                f"USER REQUEST: {original_user_query}\n\n"
+                "Produce the summary now. Cover all major topics from the dialogue above."
+            )
+
+            try:
+                effective_system = self._get_effective_system_prompt(
+                    active_model=active_model,
+                    system_prompt_extension=system_extension
+                )
+                response_text = None
+                if hasattr(self, "ollama_client") and self.ollama_client:
+                    response_text = self.ollama_client.generate_content(
+                        prompt=user_prompt,
+                        system_instruction=effective_system,
+                        model=active_model
+                    )
+                elif hasattr(self, "client") and self.client:
+                    response_text = self.client.generate_content(
+                        prompt=user_prompt,
+                        system_instruction=effective_system,
+                        model=active_model
+                    )
+                if not response_text or (isinstance(response_text, str) and response_text.startswith("Error")):
+                    response_text = (
+                        "I was unable to generate a summary of our conversation right now. "
+                        "Please try again in a moment."
+                    )
+            except Exception as e:
+                logger.error(f"Conversation summary generation failed: {e}")
+                response_text = (
+                    "I encountered an error while summarizing our conversation. "
+                    "Please try again."
+                )
+
+            display_response = self._clean_response_text(str(response_text))
+            try:
+                self.memory_manager.add_context("user", original_user_query)
+                self.memory_manager.add_context("ai", display_response)
+            except Exception:
+                pass
+
+            print(f"Agent Response: {display_response}")
+            flush_stdout()
+            self.play_speech_response(display_response)
+            return display_response
+
+
+
                # Search Managed Upload Workspace if user asks about document/files/archives without new attachment
+        # (Conversation-summary requests already returned above – they never reach here)
         workspace_search_terms = (
             "summarize", "document", "documents", "compare", "file", "files", "pdf", "docx", "notes", "txt",
             "content", "contents", "analyze", "read", "say", "says", "what does", "what's in", "what is in",
@@ -5718,6 +5964,11 @@ class LuminAgent:
             print(f"Agent Response: {app_cmd_output}")
             flush_stdout()
             self.play_speech_response(app_cmd_output)
+            try:
+                self.memory_manager.add_context("user", original_user_query)
+                self.memory_manager.add_context("ai", str(app_cmd_output))
+            except Exception:
+                pass
             return app_cmd_output
 
         # FILE_TASK: Local source file analysis must NEVER reach research/writing or LLM
@@ -5727,6 +5978,11 @@ class LuminAgent:
                 print(f"Agent Response: {combined_output}")
                 flush_stdout()
                 self.play_speech_response(combined_output)
+                try:
+                    self.memory_manager.add_context("user", original_user_query)
+                    self.memory_manager.add_context("ai", str(combined_output))
+                except Exception:
+                    pass
                 return combined_output
             target_file = self._find_local_source_file_target(original_user_query)
             if target_file:
@@ -5734,6 +5990,11 @@ class LuminAgent:
                 print(f"Agent Response: {file_analysis_output}")
                 flush_stdout()
                 self.play_speech_response(file_analysis_output)
+                try:
+                    self.memory_manager.add_context("user", original_user_query)
+                    self.memory_manager.add_context("ai", str(file_analysis_output))
+                except Exception:
+                    pass
                 return file_analysis_output
 
         # Direct Command Interception check (based on original query)
@@ -5742,6 +6003,11 @@ class LuminAgent:
             print(f"Agent Response: {direct_output}")
             flush_stdout()
             self.play_speech_response(direct_output)
+            try:
+                self.memory_manager.add_context("user", original_user_query)
+                self.memory_manager.add_context("ai", str(direct_output))
+            except Exception:
+                pass
             return direct_output
 
         # Phase 2: Retrieve context memories (Semantic / Overlap fallback) based on original query
