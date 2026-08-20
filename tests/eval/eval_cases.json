@@ -131,7 +131,7 @@
     "category": "Multi-Step Workflows",
     "description": "Multi-step chained desktop command execution",
     "query": "open YouTube, search for Gorillaz, then open Gmail",
-    "expected_contains": ["YouTube", "Gorillaz"]
+    "expected_contains": ["YouTube", "gorillaz"]
   },
   {
     "id": "tc_19_page_content_extraction",
