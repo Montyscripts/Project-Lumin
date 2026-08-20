@@ -15,6 +15,7 @@ from tools.registry import _tool_result_to_display
 
 logger = logging.getLogger("LUMIN")
 
+
 class ModalityType(str, Enum):
     TEXT = "text"
     CODE = "code"
@@ -22,10 +23,12 @@ class ModalityType(str, Enum):
     IMAGE_VISION = "image_vision"
     SYSTEM = "system"
 
+
 class TaskComplexity(str, Enum):
     TRIVIAL = "trivial"
     STANDARD = "standard"
     COMPLEX = "complex"
+
 
 class IntentType(str, Enum):
     APPLICATION_COMMAND = "APPLICATION_COMMAND"
@@ -35,11 +38,13 @@ class IntentType(str, Enum):
     VOICE_TTS_TASK = "VOICE_TTS_TASK"
     NORMAL_CONVERSATION = "NORMAL_CONVERSATION"
 
+
 class IntentRouter:
     """
     Router layer that classifies user prompts into high-level intent categories
     and executes application commands directly without invoking LLM inference.
     """
+
     def __init__(self, agent=None):
         self.agent = agent
         self.ollama_host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
@@ -282,14 +287,21 @@ class IntentRouter:
             return True, result
         return False, None
 
-
     def _is_workspace_listing_query(self, low: str, raw: str = "") -> bool:
         """Determines if query is asking to list workspace files or inspect local modules."""
         if not low:
             return False
         clean_low = low.strip().lower()
 
-        # Exclude explicit uploaded document analysis or specific file content requests
+        # EXCLUDE any question that asks for importance ranking or reasons
+        if any(phrase in clean_low for phrase in (
+            "important", "most important", "key files", "main files",
+            "critical", "central", "rank", "ranking", "why", "reason",
+            "with a short reason", "short bullets only"
+        )):
+            return False
+
+        # Exclude explicit uploaded document analysis
         if any(phrase in clean_low for phrase in (
             "summarize this document", "summarize the document", "summarize this file", "summarize the file",
             "analyze this file", "analyze the file", "analyze this document", "analyze the document",
@@ -301,11 +313,6 @@ class IntentRouter:
         )):
             return False
 
-        if hasattr(self, "agent") and self.agent and hasattr(self.agent, "upload_pipeline") and self.agent.upload_pipeline:
-            if getattr(self.agent.upload_pipeline, "metadata_store", None) or getattr(self.agent, "last_analyzed_file", None):
-                if any(w in clean_low for w in ("archive", "zip", "rar", "7z", "documents", "document", "uploaded", "inside", "say", "says")):
-                    return False
-
         workspace_phrases = (
             "list the files", "list files", "list directory", "list workspace",
             "list project files", "list the project files",
@@ -314,9 +321,6 @@ class IntentRouter:
             "files in this project", "files in the project",
             "what files are in this project", "what files are in the project",
             "which files are in this project", "which files are in the project",
-            "important files in this project", "important files in the project",
-            "most important files", "key files in this project", "key files in the project",
-            "main files in this project", "main files in the project",
             "show workspace", "what files are here", "what files exist",
             "show files in workspace", "list current directory", "show directory",
             "directory contents", "workspace contents", "files in current workspace",
@@ -324,27 +328,6 @@ class IntentRouter:
             "list all files", "show all files", "what files are in"
         )
         if any(phrase in clean_low for phrase in workspace_phrases):
-            return True
-
-        # Natural-language project/codebase inspection requests. These must be
-        # recognized before _is_file_task() so phrases such as
-        # "List the 6 most important files in this project" are treated as
-        # workspace commands rather than uploaded-document analysis.
-        if (
-            any(project_term in clean_low for project_term in (
-                "this project", "the project", "this codebase", "the codebase",
-                "this repository", "the repository", "this repo", "the repo",
-                "project folder", "workspace"
-            ))
-            and any(file_term in clean_low for file_term in (
-                "file", "files", "module", "modules", "source", "codebase",
-                "repository", "repo"
-            ))
-            and any(action_term in clean_low for action_term in (
-                "list", "show", "display", "get", "which", "what",
-                "important", "key", "main", "top", "largest", "inspect"
-            ))
-        ):
             return True
 
         if re.search(r'\b(?:list|show|display|get)\s+(?:all\s+)?(?:the\s+)?files\b', clean_low):
@@ -541,6 +524,14 @@ class IntentRouter:
         return False
 
     def _is_file_task(self, low: str, raw: str) -> bool:
+	# Never treat "important / key / main files in this project" as a document task
+        if any(phrase in low for phrase in (
+            "important files", "most important files", "key files", "main files",
+            "critical files", "central files", "rank the", "ranking",
+            "short bullets only", "with a short reason"
+        )) and any(w in low for w in ("project", "codebase", "repository", "repo", "workspace")):
+            return False
+
         # Check for local source file analysis / explanation requests
         analysis_verbs = (
             "explain", "structure", "summarize", "summary", "describe", "description",
@@ -644,7 +635,6 @@ class IntentRouter:
                 self.agent = LuminAgent()
             except Exception as e:
                 return f"Error: Agent instance not bound to IntentRouter ({e})."
-
 
         cleaned = self.clean_input(query)
         low = cleaned.lower()
@@ -825,7 +815,6 @@ class IntentRouter:
         # Developer Mode command trigger
         if low in ("/dev", "developer mode on", "developer mode", "dev mode"):
             return "DEVELOPER MODE ACTIVE. Full reasoning architecture, complete code output, and senior-engineer standards are now enforced."
-
 
         # 7. Other meta / config commands
         res = self.agent._handle_meta_command(cleaned)

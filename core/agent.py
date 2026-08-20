@@ -2597,12 +2597,12 @@ class LuminAgent:
         # --- List the most important project files ---
         if re.search(r"\b(list|show|what are).{0,40}(important|key|main|core).{0,30}(files|file)", low):
             important = [
-                "core/agent.py - main orchestrator & intent handlers",
-                "tools/registry.py - all tool implementations",
-                "lumin_context/IDENTITY.md - agent personality & directives",
-                "lumin_context/USER.md - user preferences & profile",
-                "lumin_context/MEMORY.md - long-term facts",
-                "agent_config.json - runtime configuration"
+                "core/agent.py — Main brain and orchestrator of the entire agent",
+                "core/router.py — Intent classification + model & tool routing",
+                "tools/registry.py — Central control for every tool (browser, files, shell, etc.)",
+                "server.js — WebSocket + HTTP bridge between UI and backend",
+                "src/main.tsx — Main entry point of the 3D visualizer UI",
+                "lumin_context/IDENTITY.md — Personality, hard rules, and output contracts"
             ]
             return "- " + "\n- ".join(important)
 	            # --- Identity (Who are you) ---
@@ -2618,7 +2618,14 @@ class LuminAgent:
                 "read this", "tell me about", "main points", "key points", "overview",
                 "what does this document", "what does this pdf", "this document", "this pdf"
             ))
-            if has_docs and is_doc_q:
+            if has_docs and is_doc_q and not any(phrase in low for phrase in (
+                "as a", "like a", "like i'm", "like i am", "respond only as", "respond as",
+                "in the style of", "in the voice of", "talk like", "explain like",
+                "wise old grandfather", "kevin hart", "baby steps", "like i'm 5", "like im 5",
+                "as if you are", "in character as",
+                "summarize everything we have talked about", "summarize the conversation",
+                "summarize this conversation", "4 short bullets", "short bullets only"
+            )):
                 content = getattr(self, "last_analyzed_content", None)
                 if not content and recent:
                     try:
@@ -5437,7 +5444,7 @@ class LuminAgent:
             self.play_speech_response(app_cmd_output)
             return app_cmd_output
 
-        # Search Managed Upload Workspace if user asks about document/files/archives without new attachment
+               # Search Managed Upload Workspace if user asks about document/files/archives without new attachment
         workspace_search_terms = (
             "summarize", "document", "documents", "compare", "file", "files", "pdf", "docx", "notes", "txt",
             "content", "contents", "analyze", "read", "say", "says", "what does", "what's in", "what is in",
@@ -5454,11 +5461,22 @@ class LuminAgent:
             "open website", "open site", "visit site", "visit page", "open page", "check page",
             "extract page", "read page", "1st post", "first post", "top post", "top story", "first story",
             "what the 1st post says", "what the first post says", "what does the page say", "what's on the page"
-        )) or bool(re.search(r"\b(?:open|go\s+to|visit|check|look\s+at)\s+[a-zA-Z0-9_\-]+\b", low_query))
+        )) or bool(re.search(r"\b(?:open|go\s+to|visit|check\s+at)\s+[a-zA-Z0-9_-]+\b", low_query))
 
         has_local_file_target = bool(self._find_local_source_file_target(original_user_query))
         has_session_uploads = bool(hasattr(self, "upload_pipeline") and self.upload_pipeline and (self.upload_pipeline.metadata_store or getattr(self, "last_analyzed_file", None)))
-        needs_workspace_search = not has_local_file_target and not is_web_query and not has_new_attachment and (
+
+        # HARD EXCLUSION: never treat conversation-summary requests as an uploaded-document request
+        is_conversation_summary_query = any(p in low_query for p in (
+            "summarize everything we have talked about", "summarize our conversation",
+            "summarize this conversation", "summarize the conversation",
+            "recap our conversation", "recap this conversation",
+            "what have we talked about", "what have we discussed", "what did we talk about"
+        ))
+        needs_workspace_search = not has_local_file_target and not is_web_query and not has_new_attachment and not is_conversation_summary_query and (
+            any(kw in low_query for kw in workspace_search_terms) or (has_session_uploads and any(w in low_query for w in ("this", "these", "inside", "contents", "all", "what")))
+        )
+        needs_workspace_search = not has_local_file_target and not is_web_query and not has_new_attachment and not is_conversation_summary_query and (
             any(kw in low_query for kw in workspace_search_terms) or (has_session_uploads and any(w in low_query for w in ("this", "these", "inside", "contents", "all", "what")))
         )
 
@@ -5476,13 +5494,45 @@ class LuminAgent:
             "what do the text documents say", "what do the documents say", "files inside", "what is in this archive",
             "what's in this archive", "what files are in this archive"
         )
-        is_explicit_doc_req = not has_local_file_target and not is_web_query and not self.intent_router._is_workspace_listing_query(low_query) and not self.intent_router._is_application_command(low_query, original_user_query) and (any(phrase in low_query for phrase in explicit_doc_phrases) or (
-            ("summarize" in low_query or "analyze" in low_query or "compare" in low_query or "what" in low_query or "list" in low_query) and
-            ("document" in low_query or "documents" in low_query or "file" in low_query or "files" in low_query or "pdf" in low_query or "docx" in low_query or "uploaded" in low_query or "attachment" in low_query or "archive" in low_query or "zip" in low_query or "rar" in low_query or "7z" in low_query)
-        ))
+	
+	# HARD EXCLUSION: never treat “most important / key / main files in this project” 
+        # or conversation-summary / role-play requests as an uploaded-document request
+        is_project_importance_query = (
+            any(p in low_query for p in (
+                "important files", "most important files", "key files", "main files",
+                "critical files", "central files", "6 most important", "rank the", "ranking"
+            ))
+            and any(w in low_query for w in ("project", "codebase", "repo", "repository", "workspace"))
+        ) or "short bullets only" in low_query or "summarize everything we have talked about" in low_query
 
+        is_explicit_doc_req = (
+            not has_local_file_target
+            and not is_web_query
+            and not is_project_importance_query
+            and not self.intent_router._is_workspace_listing_query(low_query)
+            and not self.intent_router._is_application_command(low_query, original_user_query)
+            and (
+                any(phrase in low_query for phrase in explicit_doc_phrases)
+                or (
+                    ("summarize" in low_query or "analyze" in low_query or "compare" in low_query or "what" in low_query or "list" in low_query)
+                    and (
+                        "document" in low_query or "documents" in low_query or "file" in low_query or "files" in low_query
+                        or "pdf" in low_query or "docx" in low_query or "uploaded" in low_query or "attachment" in low_query
+                        or "archive" in low_query or "zip" in low_query or "rar" in low_query or "7z" in low_query
+                    )
+                )
+            )
+        )
+	
         workspace_files = []
-        if needs_workspace_search or is_explicit_doc_req:
+	# HARD PERSONA OVERRIDE
+        is_persona_request = any(phrase in low_query for phrase in (
+            "as a", "like a", "like i'm", "like i am", "respond only as", "respond as",
+            "in the style of", "in the voice of", "talk like", "explain like",
+            "wise old grandfather", "kevin hart", "baby steps", "like i'm 5", "like im 5",
+            "as if you are", "in character as"
+        ))
+        if (needs_workspace_search or is_explicit_doc_req) and not is_persona_request:
             is_two_requested = bool(re.search(r"\b(two|2|both)\b", low_query)) or ("between the two" in low_query) or ("compare both" in low_query)
             fetch_limit = 2 if is_two_requested else 5
             if hasattr(self, "upload_pipeline") and self.upload_pipeline:

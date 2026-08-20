@@ -33,15 +33,13 @@ def youtube_search_and_play(query: str, play_first: bool = True) -> str:
 
     driver = None
     try:
-        # Create a fresh Chrome driver
+    # Create a fresh Chrome driver using Selenium’s built-in manager (auto-downloads correct ChromeDriver)
         options = webdriver.ChromeOptions()
         options.add_argument("--disable-notifications")
         options.add_argument("--disable-popup-blocking")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        # Headless helps in CI / servers without a display
-        options.add_argument("--headless=new")
+        options.add_argument("--start-maximized")   # make the window visible and large
 
+        # Selenium Manager (built into Selenium 4.6+) will automatically get the right ChromeDriver
         driver = webdriver.Chrome(options=options)
         driver.set_page_load_timeout(20)
 

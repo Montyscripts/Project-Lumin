@@ -1669,7 +1669,7 @@ class ToolRegistry:
             if not self.selenium_driver:
                 options = webdriver.ChromeOptions() if hasattr(webdriver, 'ChromeOptions') else None
                 if options:
-                    options.add_argument('--headless=new')
+                    # options.add_argument('--headless=new')   # disabled so the browser window is visible
                     options.add_argument('--no-sandbox')
                     options.add_argument('--disable-dev-shm-usage')
                 self.selenium_driver = webdriver.Chrome(options=options) if options else webdriver.Chrome()
