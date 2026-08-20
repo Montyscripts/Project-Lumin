@@ -343,12 +343,18 @@ except ImportError:
     def tool(func):
         return func
 
+
+
 SYSTEM_PROMPT = """Grounding Rule: You are connected to a real application with a 3D visualizer. 
-NEVER describe, narrate, or mention visualizer changes, themes, shapes, colors, glows, animations, or any UI events in your spoken response unless they were actually executed via a [COMMAND:...] tag. 
-Do not role-play or invent application actions. Keep your output clean and factual. Only use [COMMAND: CHANGE_THEME=xxx] or [COMMAND: SET_SHAPE=yyy] when you intend to trigger a real change.
+PROJECT FILE ACCESS:
+- You are running inside a local project workspace.
+- When the user asks about files, folders, source code, project structure, configuration, dependencies, architecture, or anything about the current project, inspect the actual project files using your available file tools.
+- Do NOT require the user to upload a file when the file already exists inside the project workspace.
+- Before answering questions about the project, use the filesystem/file tools to inspect the current project when necessary.
+- Only say that no document is loaded when the user specifically asks about an uploaded document and no document has been provided.
+- Never confuse an uploaded document with a project file.
 
-You are LUMIN — a high-fidelity, local-first AI software engineering partner. You operate with the depth, precision, consistency, and technical judgment of a senior staff engineer who has shipped many production systems.
-
+NEVER describe, narrate, or mention visualizer changes, themes, shapes, colors, glows, animations, or any UI events in your spoken response unless they were actually executed via a [COMMAND:...] tag.
 ========================================
 CONVERSATIONAL TONE & RESPONSE DISCIPLINE
 ========================================
@@ -991,7 +997,11 @@ class LuminAgent:
 
     def _classify_query_task(self, query: str) -> str:
         """Categorizes prompt requests to run target-optimized model paths."""
-        low = query.lower()
+        low = query.lower() 
+	
+	# Current workspace/project inspection takes priority over document analysis.
+        if self._is_workspace_listing_query(low, query):
+            return "file_ops"	
 
         # Check explicit code generation request first
         is_explicit_code_req = any(kw in low for kw in (
@@ -1012,30 +1022,65 @@ class LuminAgent:
         if is_explicit_code_req or has_code_ext or any(k in low for k in coding_indicators) or (not has_session_uploads and any(w in low for w in ("debug", "refactor", "compile", "javascript", "python", "typescript"))):
             return "coding"
 
-        # Image or video analysis (minicpm-v:8b prioritized)
+                # Image or video analysis (minicpm-v:8b prioritized)
         has_image_ext = any(ext in low for ext in (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".mp4", ".mkv", ".avi", ".mov", ".flv", ".webm", ".wmv"))
         has_explicit_image_word = any(w in low for w in ("screenshot", "picture", "photo", "image", "snapshot"))
         if has_image_ext or has_explicit_image_word:
             return "image_analysis"
 
+        # Current project / codebase inspection
+        project_terms = (
+            "this project",
+            "the project",
+            "my project",
+            "this codebase",
+            "the codebase",
+            "repository",
+            "repo",
+            "project files",
+            "source files",
+            "source code",
+            "project structure",
+            "folder structure",
+            "project architecture",
+        )
+
+        if any(term in low for term in project_terms):
+            return "file_ops"
+
         # Document / spreadsheet / presentation / archive / file analysis & summary check
         doc_analysis_phrases = (
             "summarize", "summary", "analyze file", "analyze document", "analyze this",
-            "what does this say", "what does it say", "what's in", "what is in", "compare these",
+            "what does this say", "what does it say", "compare these",
             "compare files", "compare documents", "explain file", "explain document",
-            "document analysis", "file analysis", "the document", "this document", "the file", "this file",
-            "the spreadsheet", "this spreadsheet", "in the spreadsheet", "from the spreadsheet", "the sheet",
-            "archive", "this archive", "the archive", "what files are inside", "what do the text documents say",
-            "what do the files say", "what do the documents say", "what's inside", "what is inside",
-            "list the files", "inside this", "inside the archive", "files inside", "what is in this archive",
-            "what's in this archive", "what files are in this archive", "contents of this archive", "list contents"
+            "document analysis", "file analysis", "the document", "this document",
+            "the file", "this file",
+            "the spreadsheet", "this spreadsheet", "in the spreadsheet",
+            "from the spreadsheet", "the sheet",
+            "archive", "this archive", "the archive",
+            "what do the text documents say",
+            "what do the documents say", "inside this", "inside the archive",
+            "what is in this archive",
+            "what's in this archive", "what files are in this archive",
+            "contents of this archive", "list contents"
         )
-        has_doc_ext = any(ext in low for ext in (".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".zip", ".rar", ".7z", ".tar", ".gz", ".tgz", ".csv", ".txt", ".json", ".md"))
+
+        has_doc_ext = any(ext in low for ext in (
+            ".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt",
+            ".zip", ".rar", ".7z", ".tar", ".gz", ".tgz", ".csv",
+            ".txt", ".json", ".md"
+        ))
+
         spreadsheet_doc_terms = (
-            "spreadsheet", "excel", "sheet", "sheets", "table", "data", "rows", "columns", "column", "row",
-            "employee", "employees", "salary", "salaries", "department", "departments", "record", "records",
-            "entry", "entries", "values", "presentation", "presentations", "powerpoint", "slides", "slide", "deck", "topic", "topics"
+            "spreadsheet", "excel", "sheet", "sheets", "table", "data",
+            "rows", "columns", "column", "row",
+            "employee", "employees", "salary", "salaries",
+            "department", "departments", "record", "records",
+            "entry", "entries", "values",
+            "presentation", "presentations", "powerpoint",
+            "slides", "slide", "deck", "topic", "topics"
         )
+        
         if any(kw in low for kw in doc_analysis_phrases) or (has_doc_ext and any(w in low for w in ("summarize", "analyze", "read", "explain", "compare", "what", "overview", "file", "document", "archive", "contents"))) or (has_session_uploads and (any(term in low for term in spreadsheet_doc_terms) or any(w in low for w in ("archive", "documents", "document", "files", "file", "text", "inside", "contents", "say", "says", "list", "show", "who", "which", "how many", "count", "average", "total", "highest", "lowest", "filter")))):
             return "document_analysis"
 
@@ -3442,6 +3487,14 @@ class LuminAgent:
         )):
             return False
         workspace_phrases = (
+            "important files in this project",
+            "important files in the project",
+            "most important files",
+            "key files in this project",
+            "key files in the project",
+            "files in this project",
+            "files in the project",
+            "project files",
             "list the files", "list files", "list directory", "list workspace",
             "show workspace", "what files are here", "what files exist",
             "show files in workspace", "list current directory", "show directory",

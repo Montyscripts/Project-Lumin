@@ -308,6 +308,15 @@ class IntentRouter:
 
         workspace_phrases = (
             "list the files", "list files", "list directory", "list workspace",
+            "list project files", "list the project files",
+            "show project files", "show the project files",
+            "project files", "project file list", "project file listing",
+            "files in this project", "files in the project",
+            "what files are in this project", "what files are in the project",
+            "which files are in this project", "which files are in the project",
+            "important files in this project", "important files in the project",
+            "most important files", "key files in this project", "key files in the project",
+            "main files in this project", "main files in the project",
             "show workspace", "what files are here", "what files exist",
             "show files in workspace", "list current directory", "show directory",
             "directory contents", "workspace contents", "files in current workspace",
@@ -315,6 +324,27 @@ class IntentRouter:
             "list all files", "show all files", "what files are in"
         )
         if any(phrase in clean_low for phrase in workspace_phrases):
+            return True
+
+        # Natural-language project/codebase inspection requests. These must be
+        # recognized before _is_file_task() so phrases such as
+        # "List the 6 most important files in this project" are treated as
+        # workspace commands rather than uploaded-document analysis.
+        if (
+            any(project_term in clean_low for project_term in (
+                "this project", "the project", "this codebase", "the codebase",
+                "this repository", "the repository", "this repo", "the repo",
+                "project folder", "workspace"
+            ))
+            and any(file_term in clean_low for file_term in (
+                "file", "files", "module", "modules", "source", "codebase",
+                "repository", "repo"
+            ))
+            and any(action_term in clean_low for action_term in (
+                "list", "show", "display", "get", "which", "what",
+                "important", "key", "main", "top", "largest", "inspect"
+            ))
+        ):
             return True
 
         if re.search(r'\b(?:list|show|display|get)\s+(?:all\s+)?(?:the\s+)?files\b', clean_low):
