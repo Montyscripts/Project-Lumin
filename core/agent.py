@@ -2549,6 +2549,45 @@ class LuminAgent:
         if re.search(r"\b(what\s+is\s+(my\s+)?(user\s+)?session|user\s+session\s+info(rmation)?|session\s+information)\b", low):
             return f"User session information: {self.runtime_context_manager.get_user_session_info()}."
 
+        # --- List the most important project files ---
+        if re.search(r"\b(list|show|what are).{0,40}(important|key|main|core).{0,30}(files|file)", low):
+            important = [
+                "core/agent.py - main orchestrator & intent handlers",
+                "tools/registry.py - all tool implementations",
+                "lumin_context/IDENTITY.md - agent personality & directives",
+                "lumin_context/USER.md - user preferences & profile",
+                "lumin_context/MEMORY.md - long-term facts",
+                "agent_config.json - runtime configuration"
+            ]
+            return "- " + "\n- ".join(important)
+	            # --- Identity (Who are you) ---
+        if re.search(r"\b(who\s+are\s+you|what\s+are\s+you|tell\s+me\s+about\s+yourself|introduce\s+yourself)\b", low):
+            return "I am LUMIN, a high-fidelity local-first AI software engineering partner that runs entirely on your machine using Ollama."
+
+        # --- Grounded answer for uploaded documents / PDFs ---
+        if hasattr(self, "upload_pipeline") and self.upload_pipeline:
+            recent = self.upload_pipeline.get_recent_uploads(limit=3) if hasattr(self.upload_pipeline, "get_recent_uploads") else []
+            has_docs = bool(recent) or bool(getattr(self, "last_analyzed_content", None))
+            is_doc_q = any(k in low for k in (
+                "summarize", "summary", "what does", "what is this", "explain", "analyze",
+                "read this", "tell me about", "main points", "key points", "overview",
+                "what does this document", "what does this pdf", "this document", "this pdf"
+            ))
+            if has_docs and is_doc_q:
+                content = getattr(self, "last_analyzed_content", None)
+                if not content and recent:
+                    try:
+                        content = self.upload_pipeline.get_relevant_chunks(recent[0], query=query, max_chars=6000)
+                    except Exception:
+                        content = None
+                if content and len(str(content).strip()) > 80:
+                    preview = str(content).strip()
+                    if len(preview) > 2500:
+                        preview = preview[:2500] + "\n\n[... truncated for length ...]"
+                    return (
+                        "Here is a grounded summary based on the actual extracted text from the uploaded document(s):\n\n"
+                        + preview
+                    )
         # 3.4.1 Multi-File Structural & Diff Comparison Handler
         is_compare_kw = any(kw in low for kw in ("compare", "difference", "diff", "vs", "versus", "changes between"))
         is_compare_file_target = any(w in low for w in ("file", "files", "document", "documents", "attached", "two", "both", "version", "[uploaded file", "multi-file intelligence", ".py", ".txt", ".json", ".csv", ".doc", ".pdf", "agent")) or bool(re.search(r"\bcompare\s+(?:these|the|two|both|files|documents|agent)\b", low))
