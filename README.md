@@ -21,7 +21,7 @@
 **Lumin is an early-stage experiment in building a fully local AI desktop companion.**  
 It pairs a real-time 3D audio-reactive sphere with voice interaction, local LLM orchestration via Ollama, coding tools, and dual Model Context Protocol (MCP) support.
 
-> **Current status**: Early prototype. Many features work on the author’s machine. Cross-platform reliability and polish are still limited. This is not a production-ready product.
+> **Current status**: Early prototype. Many features work on the author’s machine. Cross-platform reliability and polish are still limited. This is not a production-ready product. <
 
 [Quick Start](#-quick-start) • [Current Capabilities](#-current-capabilities) • [Interface & Modes](#-workspace-modes) • [Dual MCP Engine](#-model-context-protocol-dual-mcp-engine) • [System Architecture](#-system-architecture) • [Roadmap](#-roadmap--current-status) • [Contributing](CONTRIBUTING.md)
 
