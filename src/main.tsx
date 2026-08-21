@@ -162,24 +162,24 @@ export class GdmLiveAudio extends LitElement {
   private getChatFontSizeRem(): string {
     switch (this.chatFontSize) {
       case 'smaller':
-        return '0.82rem';
+        return '0.95rem';
       case 'larger':
-        return '1.22rem';
+        return '1.38rem';
       case 'default':
       default:
-        return '0.98rem';
+        return '1.15rem';
     }
   }
 
   private getChatLineHeight(): string {
     switch (this.chatFontSize) {
       case 'smaller':
-        return '1.56';
+        return '1.5';
       case 'larger':
-        return '1.78';
+        return '1.65';
       case 'default':
       default:
-        return '1.68';
+        return '1.55';
     }
   }
   @state() private userName = localStorage.getItem('project_lumin_user_name') || 'You';
@@ -2909,12 +2909,13 @@ export class GdmLiveAudio extends LitElement {
       outline: none;
       box-shadow: none;
       color: var(--text-primary);
-      font-size: 0.92rem;
-      padding: 7px 8px 5px 8px;
-      min-height: 34px;
-      max-height: 200px;
-      resize: vertical;
-      line-height: 1.45;
+      font-size: var(--chat-font-size, 1.15rem);
+      font-weight: var(--chat-font-weight, normal);   /* ← this makes Bold Chat work in the input */
+      padding: 11px 12px 9px 12px;
+      min-height: 48px;
+      max-height: min(55vh, 520px);   /* ← much taller, still safe for the UI */
+      resize: vertical;               /* keeps the bottom-right drag handle */
+      line-height: 1.5;
       font-family: inherit;
       box-sizing: border-box;
       overflow-y: auto;
@@ -2934,19 +2935,20 @@ export class GdmLiveAudio extends LitElement {
 
     .input-wrapper button,
     .chat-input-area .input-wrapper button {
-      width: 32px;
-      height: 32px;
+      width: 40px;
+      height: 40px;
       flex-shrink: 0;
       align-self: flex-end;
-      margin-bottom: 1px;
+      margin-bottom: 2px;
       background: transparent;
       border: none;
       color: rgba(255, 255, 255, 0.65);
       cursor: pointer;
-      border-radius: 6px;
+      border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
+      font-size: 1.15rem;          /* makes the icons themselves a bit larger */
       transition: color 0.15s, background-color 0.15s, box-shadow 0.15s;
     }
 
