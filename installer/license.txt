@@ -1,0 +1,5 @@
+LUMIN - Local-First AI Assistant
+Copyright (c) 2026 Montyscripts
+
+This software is provided as-is for personal and experimental use.
+See the project LICENSE file for full terms.
