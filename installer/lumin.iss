@@ -22,7 +22,7 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesInstallIn64BitMode=x64compatible
-UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayIcon={app}\LUMIN.exe
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
