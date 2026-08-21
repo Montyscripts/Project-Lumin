@@ -197,12 +197,16 @@ function startAgent() {
     proc = spawn(pythonBin, ['agent.py'], {
       cwd: __dirname,
       env: spawnEnv,
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
   } else if (isWindows && fs.existsSync(batPath)) {
     proc = spawn('cmd.exe', ['/c', 'start_agent.bat'], {
       cwd: __dirname,
       env: spawnEnv,
-      shell: true,
+      shell: false,
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
   } else if (!isWindows && fs.existsSync(shPath)) {
     proc = spawn('/bin/bash', ['start_agent.sh'], {

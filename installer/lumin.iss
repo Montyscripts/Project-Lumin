@@ -31,9 +31,44 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; Copy the whole project except heavy/dev-only folders
-Source: "..\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; \
-  Excludes: "venv\*;node_modules\*;.git\*;dist\*;installer\*;*.log;agent_memory.json;__pycache__\*;*.pyc"
+; Core application files (no venv, no node_modules)
+Source: "..\LUMIN.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\server.js"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\agent.py"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\package.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\package-lock.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\requirements.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\start_app.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\start_app_debug.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\stop_app.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\install_windows.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\index.html"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\vite.config.ts"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\tsconfig.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\.env.example"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\agent_config.example.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\CHANGELOG.md"; DestDir: "{app}"; Flags: ignoreversion
+
+; Important folders
+Source: "..\src\*"; DestDir: "{app}\src"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\*"; DestDir: "{app}\dist"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\core\*"; DestDir: "{app}\core"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\llm\*"; DestDir: "{app}\llm"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\memory\*"; DestDir: "{app}\memory"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\tools\*"; DestDir: "{app}\tools"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\utils\*"; DestDir: "{app}\utils"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\audio\*"; DestDir: "{app}\audio"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\lumin_context\*"; DestDir: "{app}\lumin_context"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\public\*"; DestDir: "{app}\public"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; Installer helper files
+Source: "post_install.bat"; DestDir: "{app}\installer"; Flags: ignoreversion
+Source: "license.txt"; DestDir: "{app}\installer"; Flags: ignoreversion
+Source: "icon.ico"; DestDir: "{app}\installer"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\LUMIN"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
