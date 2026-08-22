@@ -2,7 +2,7 @@
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Montyscripts"
 #define MyAppURL "https://github.com/Montyscripts/Project-Lumin"
-#define MyAppExeName "LUMIN.exe"
+#define MyAppExeName "Lumin.exe"
 
 [Setup]
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
@@ -10,7 +10,8 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
-DefaultDirName={autopf}\LUMIN
+; User-writable location so venv + node_modules can be created without admin rights
+DefaultDirName={localappdata}\Programs\LUMIN
 DefaultGroupName=LUMIN
 DisableProgramGroupPage=yes
 LicenseFile=license.txt
@@ -22,17 +23,17 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesInstallIn64BitMode=x64compatible
-UninstallDisplayIcon={app}\LUMIN.exe
+UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 
 [Files]
-; Core application files (no venv, no node_modules)
-Source: "..\LUMIN.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Core application files (no venv, no node_modules - those are created by post_install)
+Source: "..\Lumin.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\server.js"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\agent.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\package.json"; DestDir: "{app}"; Flags: ignoreversion
@@ -53,7 +54,6 @@ Source: "..\CHANGELOG.md"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Important folders
 Source: "..\src\*"; DestDir: "{app}\src"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\dist\*"; DestDir: "{app}\dist"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\core\*"; DestDir: "{app}\core"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\llm\*"; DestDir: "{app}\llm"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\memory\*"; DestDir: "{app}\memory"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -64,6 +64,9 @@ Source: "..\lumin_context\*"; DestDir: "{app}\lumin_context"; Flags: ignoreversi
 Source: "..\public\*"; DestDir: "{app}\public"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; Optional pre-built frontend (if present)
+Source: "..\dist\*"; DestDir: "{app}\dist"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Installer helper files
 Source: "post_install.bat"; DestDir: "{app}\installer"; Flags: ignoreversion
@@ -76,7 +79,7 @@ Name: "{group}\Uninstall LUMIN"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\LUMIN"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-; After files are copied, run the dependency installer
+; After files are copied, run the dependency installer (completely hidden)
 Filename: "{app}\installer\post_install.bat"; StatusMsg: "Installing Python, Node.js, Ollama and dependencies... This may take several minutes."; Flags: runhidden waituntilterminated
 
 ; Offer to launch at the end
