@@ -40,10 +40,11 @@ REM ============================================================
 REM LUMIN - SILENT PRODUCTION LAUNCHER
 REM ============================================================
 
-REM Find Node.js
+REM Find Node.js (system first, then portable copy inside LUMIN)
 set "NODE_EXE="
 if exist "%ProgramFiles%\nodejs\node.exe" set "NODE_EXE=%ProgramFiles%\nodejs\node.exe"
 if not defined NODE_EXE if exist "%LocalAppData%\Programs\nodejs\node.exe" set "NODE_EXE=%LocalAppData%\Programs\nodejs\node.exe"
+if not defined NODE_EXE if exist "%PROJ_DIR%\nodejs\node.exe" set "NODE_EXE=%PROJ_DIR%\nodejs\node.exe"
 if not defined NODE_EXE (
     where node >nul 2>&1
     if not errorlevel 1 set "NODE_EXE=node"
