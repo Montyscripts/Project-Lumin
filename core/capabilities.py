@@ -7,10 +7,10 @@ Provides transparent diagnostics to prevent silent degradation.
 import sys
 import os
 import shutil
-import logging
 from typing import Dict, Any, List
+from core.diagnostics import get_logger
 
-logger = logging.getLogger("LUMIN.Capabilities")
+logger = get_logger("capabilities")
 
 class CapabilityStatus:
     AVAILABLE = "available"
@@ -54,14 +54,11 @@ class CapabilityRegistry:
         installed_models = []
 
         try:
-            import urllib.request
-            import json
-            req = urllib.request.Request("http://localhost:11434/api/tags", headers={"User-Agent": "LUMIN-Check"})
-            with urllib.request.urlopen(req, timeout=2) as resp:
-                if resp.status == 200:
-                    daemon_online = True
-                    data = json.loads(resp.read().decode("utf-8"))
-                    installed_models = [m.get("name") for m in data.get("models", []) if m.get("name")]
+            from llm.providers.ollama import OllamaProvider
+            prov = OllamaProvider()
+            daemon_online = prov.is_healthy()
+            if daemon_online:
+                installed_models = prov.list_models()
         except Exception:
             daemon_online = False
 

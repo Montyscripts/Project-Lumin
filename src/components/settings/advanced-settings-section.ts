@@ -187,7 +187,56 @@ export function renderAdvancedSettingsSection(host: any): TemplateResult {
       </div>
     </div>
 
-    <!-- Section 3: Configuration Backup, Import & System Control -->
+    <!-- Section 3: System Diagnostics & Rotatable Logs -->
+    <div class="form-section" id="diagnostics-logs-section">
+      <div class="form-section-header">
+        <h4 class="form-section-title">
+          <span class="section-icon">📋</span> System Diagnostics & Application Logs
+        </h4>
+        <span style="font-size: 0.78rem; color: var(--text-secondary, #94a3b8); font-weight: 500;">Rotatable Log Files & Health Telemetry</span>
+      </div>
+
+      <p class="setting-desc" style="margin-bottom: 8px;">
+        View structured application logs, monitor file rotation limits (5MB per file, 3 backups), and verify diagnostic telemetry without secret exposure.
+      </p>
+
+      <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 0.8rem; color: #94a3b8; font-family: monospace;">
+            Log Location: <strong style="color: #38bdf8;">lumin.log</strong> (Rotates automatically)
+          </span>
+          <button
+            type="button"
+            class="config-btn"
+            style="padding: 3px 8px; font-size: 0.72rem; background: rgba(56, 189, 248, 0.1); border-color: rgba(56, 189, 248, 0.3); color: #38bdf8;"
+            @click=${async () => {
+              try {
+                const res = await fetch('/api/diagnostics/logs');
+                const data = await res.json();
+                if (data.success) {
+                  host.diagnosticsLogs = data.lines || [];
+                  host.diagnosticsLogPath = data.logPath;
+                  host.diagnosticsLogSize = data.sizeBytes;
+                  soundFX.playClick();
+                  host.requestUpdate();
+                }
+              } catch (e) {
+                console.error('Failed to fetch diagnostics:', e);
+              }
+            }}>
+            🔄 Refresh Diagnostic Logs
+          </button>
+        </div>
+
+        <div style="max-height: 180px; overflow-y: auto; background: #020617; border: 1px solid rgba(255,255,255,0.05); border-radius: 6px; padding: 8px; font-family: monospace; font-size: 0.72rem; color: #cbd5e1; line-height: 1.4; white-space: pre-wrap; word-break: break-all;">
+${host.diagnosticsLogs && host.diagnosticsLogs.length > 0
+  ? host.diagnosticsLogs.join('\n')
+  : '[Click "Refresh Diagnostic Logs" or run "/status" in terminal to load recent diagnostic records]'}
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 4: Configuration Backup, Import & System Control -->
     <div class="form-section" id="config-backup-section">
       <div class="form-section-header">
         <h4 class="form-section-title">

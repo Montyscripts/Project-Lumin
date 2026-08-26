@@ -27,14 +27,10 @@ BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
+from core.diagnostics import get_logger
+
 # Configure logging
-logger = logging.getLogger("lumin.mcp")
-if not logger.handlers:
-    handler = logging.StreamHandler(sys.stderr)
-    formatter = logging.Formatter("[%(asctime)s] [LUMIN-MCP] [%(levelname)s] %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
+logger = get_logger("mcp.server")
 
 # Safety Constants
 MAX_ARGUMENT_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB max payload per argument

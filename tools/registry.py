@@ -17,8 +17,9 @@ import urllib.parse
 import urllib.request
 from tools.youtube_tool import youtube_search_and_play
 from pathlib import Path
+from core.diagnostics import get_logger
 
-logger = logging.getLogger("lumin.tools")
+logger = get_logger("tools")
 
 # Optional imports with safe fallback handling
 try:
@@ -70,9 +71,10 @@ DANGEROUS_KEYWORDS = [
     "takeown", "icacls", "cipher /w", "fdisk", "rmdir /s",
     "invoke-expression", "iex ", "downloadstring", "set-executionpolicy",
     "start-process -verb runas",
-    # Linux / Bash
-    "dd if=", "mkfs", "wipefs", "chmod 777", "chown",
-    "curl | sh", "wget | sh", "eval", ":(){ :|:& };:"
+    # Linux / Bash destructive / privileged commands
+    "dd if=", "mkfs", "wipefs", "chmod 777", "chmod -r 777", "chown",
+    "curl | sh", "curl | bash", "wget | sh", "wget | bash", "eval", ":(){ :|:& };:",
+    "rm -rf /", "rm -rf /*", "mkfifo", "ncat", "nc -e"
 ]
 
 DENYLIST_PATTERNS = [
@@ -534,9 +536,9 @@ class ToolRegistry:
         return res["allowed"]
 
     def _resolve_path(self, path_str):
-        """Resolves folder shortcuts, environment variables, and returns an absolute clean path."""
+        """Converts friendly directory aliases, environment variables, and relative paths to canonical realpath."""
         if not path_str:
-            return os.path.abspath(".")
+            return os.path.realpath(".")
         
         path_clean = str(path_str).strip().strip("'\"")
         
@@ -551,10 +553,10 @@ class ToolRegistry:
             resolved_root = FOLDER_SHORTCUTS[first_segment]
             remainder = path_clean[len(first_segment):].lstrip("/\\")
             if remainder:
-                return os.path.abspath(os.path.join(resolved_root, remainder))
-            return os.path.abspath(resolved_root)
+                return os.path.realpath(os.path.join(resolved_root, remainder))
+            return os.path.realpath(resolved_root)
 
-        return os.path.abspath(os.path.expanduser(os.path.expandvars(path_clean)))
+        return os.path.realpath(os.path.expanduser(os.path.expandvars(path_clean)))
 
     def _is_denied(self, resolved_path):
         """Enforces a system-wide denylist of sensitive files and protected system paths."""
@@ -562,22 +564,26 @@ class ToolRegistry:
         if cfg.get("bypass_denylist", False):
             return False
 
+        # Evaluate both canonical realpath and normalized path to prevent symlink bypasses
         norm_path = os.path.normpath(os.path.abspath(resolved_path)).lower().replace("\\", "/")
-        filename = os.path.basename(norm_path)
+        real_path = os.path.normpath(os.path.realpath(resolved_path)).lower().replace("\\", "/")
+        paths_to_check = {norm_path, real_path}
 
-        # Exception for harmless environment file templates
-        if filename in (".env.example", ".env.template", ".env.sample"):
-            return False
+        for p_check in paths_to_check:
+            filename = os.path.basename(p_check)
+            # Exception for harmless environment file templates
+            if filename in (".env.example", ".env.template", ".env.sample"):
+                continue
 
-        path_parts = [p for p in norm_path.split("/") if p]
-        for pat in DENYLIST_PATTERNS:
-            clean_pat = pat.lower().replace("\\", "/")
-            if "/" in clean_pat:
-                if clean_pat in norm_path:
-                    return True
-            else:
-                if clean_pat == filename or clean_pat in path_parts or clean_pat in norm_path:
-                    return True
+            path_parts = [p for p in p_check.split("/") if p]
+            for pat in DENYLIST_PATTERNS:
+                clean_pat = pat.lower().replace("\\", "/")
+                if "/" in clean_pat:
+                    if clean_pat in p_check:
+                        return True
+                else:
+                    if clean_pat == filename or clean_pat in path_parts or clean_pat in p_check:
+                        return True
 
         return False
 
@@ -593,8 +599,8 @@ class ToolRegistry:
 
         import tempfile
         allowed_roots = list(cfg.get("allowed_folders", []))
-        workspace_root = os.path.abspath(os.getcwd())
-        temp_root = os.path.abspath(tempfile.gettempdir())
+        workspace_root = os.path.realpath(os.getcwd())
+        temp_root = os.path.realpath(tempfile.gettempdir())
 
         default_roots = [
             str(Path.home() / "Desktop"),
@@ -608,11 +614,11 @@ class ToolRegistry:
             if dr and dr not in allowed_roots:
                 allowed_roots.append(dr)
 
-        resolved_norm = os.path.normpath(abs_path).lower()
+        resolved_norm = os.path.realpath(abs_path).lower()
         for root in allowed_roots:
             if not root:
                 continue
-            normalized_root = os.path.normpath(os.path.abspath(root)).lower()
+            normalized_root = os.path.realpath(root).lower()
             if resolved_norm == normalized_root or resolved_norm.startswith(normalized_root + os.sep) or resolved_norm.startswith(normalized_root + "/"):
                 return None
 
@@ -634,15 +640,19 @@ class ToolRegistry:
                 remaining_work="Check available tool names"
             )
             logger.error(f"[TOOL ERROR] Tool '{tool_name}' not found.")
+            print(f">>> [TOOL START]: {tool_name}", flush=True)
+            print(f">>> [TOOL ERROR]: Tool '{tool_name}' not found in registry.", flush=True)
+            print(f">>> [TOOL END]: {tool_name} (Status: FAILED)", flush=True)
             return res
 
+        print(f">>> [TOOL START]: {tool_name}", flush=True)
         try:
             logger.info(f"Executing tool '{tool_name}' with args={args} kwargs={kwargs}")
             res = self.tools[tool_name](*args, **kwargs)
             if isinstance(res, ToolResult):
-                return res
-            if isinstance(res, dict) and "status" in res:
-                return ToolResult(
+                final_res = res
+            elif isinstance(res, dict) and "status" in res:
+                final_res = ToolResult(
                     status=res.get("status", "succeeded"),
                     tool=res.get("tool", tool_name),
                     planned=res.get("planned", f"Execute {tool_name}"),
@@ -652,42 +662,55 @@ class ToolRegistry:
                     remaining_work=str(res.get("remaining_work", "")),
                     details=str(res.get("details", ""))
                 )
-
-            res_str = str(res) if res is not None else ""
-            if res_str.startswith("Error") or res_str.startswith("Security Exception") or res_str.startswith("Security Guard"):
-                return ToolResult(
-                    status="blocked" if "Security" in res_str else "failed",
-                    tool=tool_name,
-                    planned=f"Execute {tool_name}",
-                    attempted=f"Called {tool_name} with args={args}",
-                    failed=res_str,
-                    remaining_work="Resolve security exception or fix tool arguments"
-                )
-            elif "cancelled" in res_str.lower():
-                return ToolResult(
-                    status="cancelled",
-                    tool=tool_name,
-                    planned=f"Execute {tool_name}",
-                    attempted=f"Called {tool_name} with args={args}",
-                    failed=res_str,
-                    remaining_work="Action cancelled"
-                )
             else:
-                return ToolResult(
-                    status="succeeded",
-                    tool=tool_name,
-                    planned=f"Execute {tool_name}",
-                    attempted=f"Executed {tool_name}",
-                    succeeded=res_str
-                )
+                res_str = str(res) if res is not None else ""
+                if res_str.startswith("Error") or res_str.startswith("Security Exception") or res_str.startswith("Security Guard"):
+                    final_res = ToolResult(
+                        status="blocked" if "Security" in res_str else "failed",
+                        tool=tool_name,
+                        planned=f"Execute {tool_name}",
+                        attempted=f"Called {tool_name} with args={args}",
+                        failed=res_str,
+                        remaining_work="Resolve security exception or fix tool arguments"
+                    )
+                elif "cancelled" in res_str.lower():
+                    final_res = ToolResult(
+                        status="cancelled",
+                        tool=tool_name,
+                        planned=f"Execute {tool_name}",
+                        attempted=f"Called {tool_name} with args={args}",
+                        failed=res_str,
+                        remaining_work="Action cancelled"
+                    )
+                else:
+                    final_res = ToolResult(
+                        status="succeeded",
+                        tool=tool_name,
+                        planned=f"Execute {tool_name}",
+                        attempted=f"Executed {tool_name}",
+                        succeeded=res_str
+                    )
+
+            if final_res.status == "succeeded":
+                print(f">>> [TOOL END]: {tool_name} (Status: SUCCEEDED)", flush=True)
+            elif final_res.status in ("failed", "blocked"):
+                print(f">>> [TOOL ERROR]: {tool_name} - {final_res.failed or 'Execution failed'}", flush=True)
+                print(f">>> [TOOL END]: {tool_name} (Status: {final_res.status.upper()})", flush=True)
+            else:
+                print(f">>> [TOOL END]: {tool_name} (Status: {final_res.status.upper()})", flush=True)
+
+            return final_res
         except Exception as e:
             logger.error(f"Error executing tool {tool_name}: {e}")
+            err_msg = f"Exception during tool execution: {str(e)}"
+            print(f">>> [TOOL ERROR]: {tool_name} - {err_msg}", flush=True)
+            print(f">>> [TOOL END]: {tool_name} (Status: FAILED)", flush=True)
             return ToolResult(
                 status="failed",
                 tool=tool_name,
                 planned=f"Execute {tool_name}",
                 attempted=f"Invoked {tool_name}",
-                failed=f"Exception during tool execution: {str(e)}",
+                failed=err_msg,
                 remaining_work="Inspect stack trace and fix tool implementation or parameters"
             )
 
@@ -1259,16 +1282,9 @@ class ToolRegistry:
 
         # 1. Attempt to query local Ollama vision model if Ollama service is active
         try:
-            import urllib.request
-            import urllib.error
-            import base64
-            import json
-
-            # Check installed Ollama models
-            tags_req = urllib.request.Request("http://localhost:11434/api/tags", headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(tags_req, timeout=3) as resp:
-                tags_data = json.loads(resp.read().decode("utf-8"))
-                models = [m.get("name", "") for m in tags_data.get("models", [])]
+            from llm.providers import get_provider
+            prov = get_provider("ollama")
+            models = prov.list_models()
 
             vision_candidates = [
                 "minicpm-v:8b", "minicpm-v",
@@ -1288,33 +1304,26 @@ class ToolRegistry:
                         break
 
             if active_vision:
-                with open(resolved, "rb") as f:
-                    b64_img = base64.b64encode(f.read()).decode("utf-8")
-
                 vision_prompt = clean_q or "Technical visual analysis task: Describe the subject, visual details, dominant colors, objects, visible text, setting, and composition of this image in detail factually. Answer directly with factual visual observations without refusal or boilerplate."
-                gen_payload = {
-                    "model": active_vision,
-                    "prompt": vision_prompt,
-                    "images": [b64_img],
-                    "stream": False,
-                    "options": {"temperature": 0.2, "num_predict": 1024}
-                }
-                gen_req = urllib.request.Request("http://localhost:11434/api/generate", data=json.dumps(gen_payload).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
-                with urllib.request.urlopen(gen_req, timeout=60) as gen_resp:
-                    res_json = json.loads(gen_resp.read().decode("utf-8"))
-                    v_text = res_json.get("response", "").strip()
-                    refusal_keywords = (
-                        "cannot provide a description", "cannot provide descriptions",
-                        "cannot describe visual", "unable to describe visual",
-                        "cannot provide visual", "as per our guidelines",
-                        "as per guidelines", "as an ai", "i cannot provide",
-                        "i am unable to provide", "cannot describe this",
-                        "cannot describe any visual", "unable to describe any visual",
-                        "cannot provide any visual description", "i cannot analyze visual",
-                        "unable to analyze visual", "cannot describe visual content"
-                    )
-                    if v_text and not any(kw in v_text.lower() for kw in refusal_keywords):
-                        return v_text
+                v_text = prov.generate(
+                    prompt=vision_prompt,
+                    model=active_vision,
+                    image_path=resolved,
+                    temperature=0.2,
+                    num_predict=1024
+                )
+                refusal_keywords = (
+                    "cannot provide a description", "cannot provide descriptions",
+                    "cannot describe visual", "unable to describe visual",
+                    "cannot provide visual", "as per our guidelines",
+                    "as per guidelines", "as an ai", "i cannot provide",
+                    "i am unable to provide", "cannot describe this",
+                    "cannot describe any visual", "unable to describe any visual",
+                    "cannot provide any visual description", "i cannot analyze visual",
+                    "unable to analyze visual", "cannot describe visual content"
+                )
+                if v_text and not any(kw in v_text.lower() for kw in refusal_keywords):
+                    return v_text
         except Exception:
             pass
 
@@ -1984,18 +1993,24 @@ class ToolRegistry:
             return f"Reddit extraction failed: {e}"
 
     def list_models(self):
-        """Lists Ollama local models."""
-        url = "http://localhost:11434/api/tags"
+        """Lists Ollama local models and running VRAM status via ModelManager."""
         try:
-            req = urllib.request.Request(url)
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                models = [m["name"] for m in data.get("models", [])]
-                if not models:
-                    return "No Ollama models installed. Run: ollama pull llama3.2:3b"
-                return "Ollama Local Models:\n" + "\n".join([f"- {m}" for m in models])
+            from core.model_manager import ModelManager
+            mgr = ModelManager()
+            status = mgr.get_all_models_status()
+            installed = status.get("installed_models", [])
+            running = status.get("running_models", [])
+            if not installed:
+                return "No Ollama models installed. Run: ollama pull llama3.2:3b"
+            lines = ["Ollama Local Models:"]
+            for m in installed:
+                is_run = m in running or any(m.startswith(r) or r.startswith(m) for r in running)
+                run_tag = " [Running in VRAM]" if is_run else ""
+                lines.append(f"- {m}{run_tag}")
+            return "\n".join(lines)
         except Exception as e:
             return f"Failed to list local models (Ollama may be offline): {e}\nNo Ollama models installed. Run: ollama pull llama3.2:3b"
+
 
     def switch_model(self, model_name):
         """Switches active model selection."""

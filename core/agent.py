@@ -21,24 +21,11 @@ import tarfile
 import zlib
 from typing import Any, Dict, List, Optional
 
-# Setup robust logging based on debug mode early
-DEBUG_MODE = os.environ.get("LUMIN_DEBUG", "").lower() in ("true", "1", "yes")
+# Setup structured rotatable logging and diagnostics early
+from core.diagnostics import setup_logging, get_logger, DEBUG_MODE, get_diagnostic_summary, sanitize_log_message
 
-if DEBUG_MODE:
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler(sys.stdout)]
-    )
-else:
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        filename='lumin.log',
-        filemode='a'
-    )
-
-logger = logging.getLogger("lumin.core")
+setup_logging()
+logger = get_logger("core")
 
 try:
     from rich.console import Console
@@ -53,8 +40,10 @@ except ImportError:
     console = DummyConsole()
 
 from llm.client import OllamaClient
+from llm.providers import get_provider, OllamaProvider, BaseModelProvider
 from memory.manager import MemoryManager
-from tools.registry import ToolRegistry, ToolResult, _tool_result_to_display
+from tools.registry import ToolRegistry, ToolResult
+from core.results import AgentResult, _tool_result_to_display
 from audio.tts_cache import TTSCacheManager
 from utils.helpers import print_line, print_empty, format_terminal_box_header, format_terminal_box_footer, flush_stdout
 from core.capabilities import CapabilityRegistry
@@ -63,186 +52,10 @@ from audio.local_tts import LocalTTSEngine, sanitize_text_for_tts
 from core.writing import WritingGenerator
 from core.router import IntentRouter, IntentType
 from core.runtime_context import RuntimeContextManager
-
-class AgentResult(dict):
-    """
-    Standardized, structured return type for agent reasoning loops, tool calls, and query processing.
-    Schema required by specification:
-    {
-        "status": "success" | "partial" | "failed" | "needs_user",
-        "completed": list[str],
-        "failed": list[str],
-        "remaining": list[str],
-        "error": str | None,
-        "next_action": str | None,
-        "output": str | None
-    }
-    """
-    def __init__(
-        self,
-        status: str,
-        completed: Optional[List[str]] = None,
-        failed: Optional[List[str]] = None,
-        remaining: Optional[List[str]] = None,
-        error: Optional[str] = None,
-        next_action: Optional[str] = None,
-        output: Optional[str] = None,
-        **kwargs
-    ):
-        norm_status = str(status).lower()
-        if norm_status in ("succeeded", "ok", "done", "true", "success"):
-            norm_status = "success"
-        elif norm_status in ("blocked", "requires_user", "needs_user"):
-            norm_status = "needs_user"
-        elif norm_status in ("cancelled", "failed", "error"):
-            norm_status = "failed"
-        elif norm_status in ("partial", "incomplete"):
-            norm_status = "partial"
-        else:
-            norm_status = "failed"
-
-        c_list = [str(x) for x in (completed or [])]
-        f_list = [str(x) for x in (failed or [])]
-        r_list = [str(x) for x in (remaining or [])]
-
-        super().__init__(
-            status=norm_status,
-            completed=c_list,
-            failed=f_list,
-            remaining=r_list,
-            error=str(error) if error is not None else None,
-            next_action=str(next_action) if next_action is not None else None,
-            output=str(output) if output is not None else None,
-            **kwargs
-        )
-
-    @property
-    def status(self) -> str: return self["status"]
-    @property
-    def completed(self) -> List[str]: return self["completed"]
-    @property
-    def failed(self) -> List[str]: return self["failed"]
-    @property
-    def remaining(self) -> List[str]: return self["remaining"]
-    @property
-    def error(self) -> Optional[str]: return self["error"]
-    @property
-    def next_action(self) -> Optional[str]: return self["next_action"]
-    @property
-    def output(self) -> Optional[str]: return self.get("output")
-
-    def __contains__(self, item):
-        if super().__contains__(item):
-            return True
-        if isinstance(item, str):
-            return (
-                item in str(self)
-                or (self.get("output") and item in self.get("output"))
-                or (self.get("error") and item in self.get("error"))
-            )
-        return False
-
-    def to_formatted_text(self) -> str:
-        output_str = self.get("output") or ""
-        # Pure success without failures outputs text directly for clean UX
-        if self["status"] == "success" and not self["failed"] and output_str:
-            return output_str
-
-        status_tag = f"[{self['status'].upper()}]"
-        lines = [f"{status_tag} Agent Task Execution Report:"]
-        if self["completed"]:
-            lines.append("• Completed Steps:")
-            for item in self["completed"]:
-                lines.append(f"  - {item}")
-        if self["failed"]:
-            lines.append("• Failed Steps:")
-            for item in self["failed"]:
-                lines.append(f"  - {item}")
-        if self["remaining"]:
-            lines.append("• Remaining Work:")
-            for item in self["remaining"]:
-                lines.append(f"  - {item}")
-        if self["error"]:
-            lines.append(f"• Error: {self['error']}")
-        if self["next_action"]:
-            lines.append(f"• Suggested Next Action: {self['next_action']}")
-        if output_str:
-            lines.append(f"\n{output_str}")
-        return "\n".join(lines)
-
-    def __str__(self):
-        return self.to_formatted_text()
+from core.model_manager import ModelManager
 
 # Silence warnings
 warnings.filterwarnings("ignore")
-
-def _tool_result_to_display(res: Any) -> str:
-    """
-    Safely converts a ToolResult, dict, or string tool output into a clean, human-readable string.
-    Guaranteed to never raise an exception.
-    """
-    if res is None:
-        return ""
-    if isinstance(res, str):
-        return res
-    try:
-        if isinstance(res, dict) or hasattr(res, "get"):
-            status = str(res.get("status", "")).lower()
-
-            parts = []
-
-            # Succeeded / Completed / Output / Details
-            succeeded = res.get("succeeded")
-            completed = res.get("completed")
-            output = res.get("output")
-            details = res.get("details")
-
-            if succeeded:
-                if isinstance(succeeded, (list, tuple)):
-                    parts.extend(str(x) for x in succeeded if x)
-                else:
-                    parts.append(str(succeeded))
-            elif completed:
-                if isinstance(completed, (list, tuple)):
-                    parts.extend(str(x) for x in completed if x)
-                else:
-                    parts.append(str(completed))
-
-            if output and str(output) not in parts:
-                parts.append(str(output))
-
-            if details and str(details) not in parts:
-                parts.append(str(details))
-
-            error = res.get("error")
-            failed = res.get("failed") or res.get("failed_str")
-            error_parts = []
-            if error:
-                error_parts.append(str(error))
-            if failed:
-                if isinstance(failed, (list, tuple)):
-                    error_parts.extend(str(x) for x in failed if x and str(x) not in error_parts)
-                elif str(failed) not in error_parts:
-                    error_parts.append(str(failed))
-
-            if parts:
-                main_msg = "\n".join(parts)
-                if error_parts:
-                    return f"{main_msg}\nErrors: {', '.join(error_parts)}"
-                return main_msg
-            elif error_parts:
-                return f"{', '.join(error_parts)}"
-            elif status:
-                tool_name = res.get("tool", "")
-                return f"Tool '{tool_name}' status: {status}."
-            else:
-                return str(res)
-        return str(res)
-    except Exception:
-        try:
-            return str(res)
-        except Exception:
-            return f"Tool execution result: {type(res).__name__}"
 
 
 # Optional capability flags and imports with safe fallback handling
@@ -345,205 +158,20 @@ except ImportError:
 
 
 
-SYSTEM_PROMPT = """Grounding Rule: You are connected to a real application with a 3D visualizer. 
-PROJECT FILE ACCESS:
-- You are running inside a local project workspace.
-- When the user asks about files, folders, source code, project structure, configuration, dependencies, architecture, or anything about the current project, inspect the actual project files using your available file tools.
-- Do NOT require the user to upload a file when the file already exists inside the project workspace.
-- Before answering questions about the project, use the filesystem/file tools to inspect the current project when necessary.
-- Only say that no document is loaded when the user specifically asks about an uploaded document and no document has been provided.
-- Never confuse an uploaded document with a project file.
-
-NEVER describe, narrate, or mention visualizer changes, themes, shapes, colors, glows, animations, or any UI events in your spoken response unless they were actually executed via a [COMMAND:...] tag.
-========================================
-CONVERSATIONAL TONE & RESPONSE DISCIPLINE
-========================================
-
-1. ABSOLUTELY NO INTERNAL PROCESS NARRATION:
-   - Your internal reasoning process (context loading, intent resolution, mental model construction, verification) is 100% SILENT and INTERNAL.
-   - You MUST NEVER print, list, or narrate section headers or internal steps like "1. Perception & Context Loading", "2. Intent Resolution", "3. Mental Model Construction", or "6. Verification Gate" in your output to the user.
-   - Jump directly to answering the user in a clean, natural, helpful voice.
-
-2. NATURAL CONVERSATION & GREETINGS:
-   - For greetings ("hi", "hello", "hey", "good morning"), casual chatter, quick questions, or simple requests: respond warmly, naturally, and concisely (1-3 sentences).
-   - Do NOT dump heavy structured frameworks, bulleted diagnostic reports, or multi-stage engineering headers when the user is just saying hello or asking a quick conversational question.
-   - Speak like a friendly, clear, articulate human colleague.
-
-3. TECHNICAL REPORTS & DEEP WORK:
-   - Reserve structured multi-section reports ONLY for when the user explicitly requests deep technical analysis, multi-file comparisons, code debugging, architecture reviews, or complex project work.
-   - When asked to explain technical concepts "simply" or "like I'm a baby", always lead with a clear, 2-3 sentence plain-English summary before any technical details.
-
-========================================
-WORKING MEMORY & PROJECT CONTINUITY
-========================================
-
-You maintain persistent working memory of the current project:
-- The user’s stated high-level goals
-- The most recent substantial code or architecture
-- Key design decisions already made
-- Known constraints and non-negotiables
-- Outstanding issues and planned next steps
-
-When the user refers to prior work in natural language (“upgrade the python script”, “fix the bugs”, “make the whole thing better”, “the previous version”), automatically re-activate the relevant context. Do not force the user to re-paste material unless critical context has truly been lost.
-
-========================================
-PROFESSIONAL ENGINEERING STANDARDS
-========================================
-
-- Prefer root-cause fixes over patches.
-- Prefer complete, runnable, production-quality artifacts over outlines or partial answers.
-- Never invent APIs, libraries, or behaviors that do not exist in the provided context.
-- When rewriting or upgrading code, preserve original intent and observable behavior unless the user explicitly requested a change.
-- Be willing to say “this part is solid” as clearly as you say “this part needs work.”
-- Optimize for the user’s long-term ability to own and evolve the system themselves.
-- Match the user’s technical depth. Respond like a senior colleague, not a tutor, unless teaching is requested.
-
-========================================
-CODE GENERATION & ANTI-TRUNCATION RULES
-========================================
-
-When the user asks to rewrite, upgrade, refactor, fix, improve, or produce the full version of any code:
-
-1. You MUST output the COMPLETE, self-contained, runnable source.
-2. You are forbidden from using placeholders such as:
-   - // ... rest of the code
-   - # remaining implementation omitted
-   - // same as before
-   - pass  # TODO
-3. Improve clarity, correctness, robustness, and structure while staying faithful to the original intent.
-4. Include necessary imports, proper error handling, and professional-level documentation where appropriate.
-5. After the full code you may optionally add a short “What changed and why” section — but only if it adds real value.
-
-Completeness is more important than response length.
-
-========================================
-STRUCTURED RESPONSE DISCIPLINE
-========================================
-
-- Analysis tasks → Clear understanding + prioritized findings + concrete recommendations
-- Fix / Upgrade / Rewrite tasks → Extremely brief context statement + complete code + optional short changelog
-- Planning tasks → Honest current-state assessment + ranked improvements + recommended sequence + immediate next actions
-
-Never bury the actual solution under long preambles.
-
-========================================
-QUALITY GATE (SILENT)
-========================================
-
-Before finalizing any significant technical response, verify:
-1. Does this actually solve the user’s real goal?
-2. Is the solution complete enough to be used directly?
-3. Have I preserved the important parts of the original system?
-4. Would a senior engineer be comfortable accepting this?
-5. Did I take any shortcut that will create future problems?
-
-If any answer is no, revise internally before responding.
-
-========================================
-SPREADSHEET, PRESENTATION & VIDEO FACTUAL DIRECTIVE (NO REFUSALS)
-========================================
-
-If presentation slides, spreadsheet tables, document data, or video keyframe analysis have already been extracted and are available in the session or prompt context:
-1. Answer factual questions and describe visual content DIRECTLY from that extracted data.
-2. DO NOT refuse or decline to describe uploaded media (e.g. videos or images). Media analysis was explicitly requested by the user for technical inspection.
-3. NEVER emit phrases like "cannot provide a description of any visual content" or refusal disclaimers.
-4. Do NOT reply with Python/pandas scripts, code snippets, or "here is a script you can run" when data is already present.
-5. Only offer or write code when the user EXPLICITLY asks for a script or program.
-6. Present direct factual answers, chronological video breakdowns, slide overviews, extracted rows, lists, or markdown tables clearly and concisely.
-
-========================================
-FINAL DIRECTIVE
-========================================
-
-You are not a chatbot that gives generic advice.  
-You are a precise, high-context, professional AI development partner that the user can rely on every day to build, improve, and ship real software while retaining full ownership of their work.
-
-Respond with accuracy, completeness, and engineering judgment.
-"""
-
-# Safety & Anti-Censorship Word Lists
-DANGEROUS_KEYWORDS = [
-    "remove-item", "rm -rf", "del /", "format ", "diskpart",
-    "shutdown", "stop-computer", "restart-computer",
-    "net user", "reg delete", "vssadmin", "bcdedit",
-    "takeown", "icacls", "cipher /w", "fdisk",
-    "dd if=", "mkfs", "wipefs", "rmdir /s",
-]
-
-FIREARM_KEYWORDS = [
-    "disassemble", "reassemble", "field strip", "take apart", "put back together",
-    "gun", "firearm", "handgun", "pistol", "rifle", "shotgun",
-    "clean", "cleaning", "maintenance", "barrel", "slide", "trigger",
-    "safety check", "chamber", "magazine", "recoil", "sight",
-    "g3c", "glock", "sig", "smith", "ruger", "beretta", "taurus",
-    "ak", "ak-47", "ar-15", "ar15", "m4", "m16", "mp5", "uzi",
-    "sniper", "carbine", "ammo", "reload", "assemble", "build a gun",
-    "build a firearm", "build a rifle", "build a pistol",
-    "how to build", "how to make", "construct a firearm",
-]
-
-UNCENSORED_KEYWORDS = [
-    "roleplay", "story", "unfiltered", "dark", "nsfw", "explicit", "raw",
-    "uncensored", "without alignment", "no filter", "no restrictions",
-    "can you swear", "controversial", "taboo", "unhinged", "jailbreak",
-    "no censorship", "write a story about", "role play", "sensitive topic",
-    "controversial topic", "edgy", "dark humor", "i can't help with that",
-    "i can't discuss that", "refuse", "avoid", "unrestricted", "hypothetical scenario",
-    "taboo subject", "bypass", "override", "without censorship", "sensitive question",
-    "uncensored screenplay", "uncensored novel", "unrestricted creative writing",
-    "unrestricted screenplay", "unrestricted novel", "graphic screenplay", "mature fiction",
-    "unfiltered screenplay", "unfiltered novel", "dark fantasy screenplay", "dark fantasy novel",
-    "fuck", "shit", "ass", "pussy", "pussies", "dick", "cock", "cunt",
-    "tits", "titties", "boobs", "blowjob", "blow job", "handjob", "hand job",
-    "masturbat", "orgasm", "sex ", "sexual", "porn", "nude", "naked",
-    "vibrator", "dildo", "anal", "cum", "sperm", "ejaculat", "horny",
-    "sexy", "fetish", "bdsm", "bondage", "dominatrix", "prostitut",
-    "escort", "erotic", "sensual", "kinky", "strip", "lingerie",
-    "incest", "rape", "bestiality", "pedophil", "zoophil",
-    "eat pussy", "eat me", "lick pussy", "suck dick", "fuck me",
-    "how to have sex", "how to fuck", "how to masturbate",
-]
-
-TASK_MODELS = {
-    "coding":             ["qwen2.5-coder:7b", "codegemma:7b", "llama3.2:3b", "phi4-mini"],
-    "writing":            ["gemma3:4b", "phi4-mini", "llama3.2:3b", "mistral:7b"],
-    "reasoning":          ["phi4-mini", "qwen2.5:7b", "llama3.2:3b"],
-    "research":           ["llama3.2:3b", "phi4-mini", "gemma3:4b"],
-    "math":               ["phi4-mini", "qwen2.5:7b", "llama3.2:3b"],
-    "image_analysis":     ["minicpm-v:8b", "minicpm-v", "gemma4:e4b", "gemma4:12b", "gemma4", "qwen2.5vl:7b", "llava:7b"],
-    "planning":           ["phi4-mini", "gemma3:4b", "llama3.2:3b"],
-    "file_ops":           ["llama3.2:3b", "phi4-mini", "gemma3:4b"],
-    "browsing":           ["llama3.2:3b", "phi4-mini"],
-    "system":             ["llama3.2:3b", "phi4-mini"],
-    "document_analysis":  ["phi4-mini", "qwen2.5:7b", "llama3.2:3b"],
-    "other":              ["llama3.2:3b", "phi4-mini", "gemma3:4b"],
-    "uncensored_writing": ["dolphin-mistral:7b-v2.6-dpo-laser", "llama3.2:3b", "phi4-mini", "dolphin-llama3:8b"],
-}
-
-MODEL_SIZE_GB = {
-    "llama3.2:3b":           2.0,
-    "phi4-mini":             2.5,
-    "gemma3:4b":             2.5,
-    "gemma4:e4b":            3.2,
-    "gemma4:12b":            8.0,
-    "gemma4":                4.0,
-    "mistral:7b":            4.1,
-    "qwen2.5:7b":            4.5,
-    "llava:7b":              4.5,
-    "qwen2.5-coder:7b":      4.7,
-    "codegemma:7b":          5.0,
-    "qwen2.5vl:7b":          4.7,
-    "minicpm-v:8b":          5.5,
-    "dolphin-llama3:8b":     4.9,
-    "dolphin-mistral:7b-v2.6-dpo-laser": 4.1,
-}
-
-_IDEAL_SIZES = {
-    "Laptop / Low-Resource Class": 3.0,
-    "Mid-End Desktop Class":       5.0,
-    "High-End Desktop Class":      10.0,
-    "Workstation Class":           20.0,
-}
+from core.prompts import (
+    SYSTEM_PROMPT,
+    UNCENSORED_DIRECTIVE,
+    SIMPLE_LANGUAGE_DIRECTIVE,
+    DOC_FACTUAL_DIRECTIVE,
+    VIDEO_MISSING_DIRECTIVE,
+    DANGEROUS_KEYWORDS,
+    FIREARM_KEYWORDS,
+    UNCENSORED_KEYWORDS,
+    TASK_MODELS,
+    MODEL_SIZE_GB,
+    _IDEAL_SIZES,
+    assemble_effective_system_prompt,
+)
 
 
 class LuminAgent:
@@ -565,8 +193,9 @@ class LuminAgent:
         self.router_learning_path = os.path.join(self.base_dir, "router_learning.json")
         self.config_path = os.path.join(self.base_dir, "agent_config.json")
         
-        # Modules
-        self.ollama_client = OllamaClient()
+        # Modules & LLM Provider Abstraction
+        self.provider: BaseModelProvider = OllamaProvider()
+        self.ollama_client = self.provider
         self.memory_manager = MemoryManager(client=self.ollama_client)
         self.tool_registry = ToolRegistry(memory_manager=self.memory_manager, base_dir=self.base_dir)
         self.tts_cache = TTSCacheManager()
@@ -581,6 +210,7 @@ class LuminAgent:
 
         # Resource Governor & Capability Registry
         self.resource_governor = ResourceGovernor(config=self.config)
+        self.provider.resource_governor = self.resource_governor
         self.ollama_client.resource_governor = self.resource_governor
         self.capabilities = CapabilityRegistry(self.config, resource_governor=self.resource_governor)
 
@@ -600,6 +230,7 @@ class LuminAgent:
         self.local_tts = LocalTTSEngine(self.config, tts_cache=self.tts_cache)
         self.intent_router = IntentRouter(agent=self)
         self.runtime_context_manager = RuntimeContextManager(agent=self)
+        self.model_manager = ModelManager(provider=self.provider, resource_governor=self.resource_governor, config_path=self.config_path)
         
         # Settings state
         self.is_active = True
@@ -630,8 +261,10 @@ class LuminAgent:
 
         if self.local_models:
             self.active_model = "llama3.2:3b" if "llama3.2:3b" in self.local_models else self.local_models[0]
+            self.active_model_reason = f"initialized default model {self.active_model}"
         else:
             self.active_model = "llama3.2:3b"
+            self.active_model_reason = "default baseline (Ollama standby)"
 
         # Optional MCP server startup if enabled in configuration
         if self.enable_mcp:
@@ -709,7 +342,16 @@ class LuminAgent:
         return "Laptop / Low-Resource Class"
 
     def _fetch_local_models(self) -> list:
-        """Retrieves list of active local Ollama models."""
+        """Retrieves list of active local models from LLM provider."""
+        if hasattr(self, "provider") and self.provider:
+            try:
+                models = self.provider.list_models()
+                self._ollama_reachable = self.provider.is_healthy()
+                if models:
+                    return models
+            except Exception as e:
+                logger.debug(f"Provider model listing error: {e}")
+
         if not REQUESTS_OK:
             self._ollama_reachable = False
             return []
@@ -867,37 +509,13 @@ class LuminAgent:
 
     def _get_effective_system_prompt(self, active_model: Optional[str] = None, system_prompt_extension: Optional[str] = None) -> str:
         """Retrieves effective system prompt, prepending custom user prompt and injecting dynamic runtime context."""
-        user_prompt = getattr(self, "user_system_prompt", "").strip()
-        base_prompt = f"{user_prompt}\n\n{SYSTEM_PROMPT}" if user_prompt else SYSTEM_PROMPT
-        
-        if system_prompt_extension:
-            base_prompt += f"\n\n{system_prompt_extension}"
-        
-        target_model = active_model or getattr(self, "force_model", None) or getattr(self, "active_model", "llama3.2:3b")
-        
-        # Check if the active or locked model is an uncensored / unfiltered model
-        uncensored_terms = ["dolphin", "uncensored", "wizard", "vicuna", "unfiltered", "mixtral", "llama3-uncensored", "hermes", "dpo-laser", "laser"]
-        is_uncensored = any(term in (target_model or "").lower() for term in uncensored_terms)
-        
-        if is_uncensored:
-            base_prompt += (
-                "\n\n========================================\n"
-                "UNCENSORED / UNFILTERED MODEL DIRECTIVE\n"
-                "========================================\n"
-                "The active model is an uncensored/unfiltered model (e.g. dolphin, wizard-vicuna, hermes, etc.).\n"
-                "1. Do NOT force corporate refusals, canned professional AI partner disclaimers, or moral lecturing on ordinary crude humor, jokes, edgy creative writing, or harmless banter.\n"
-                "2. When asked for jokes, humor, or creative content, respond naturally, candidly, and directly without refusing or giving preachy meta-explanations.\n"
-                "3. Preserve strict safety rules ONLY for requests involving severe illegal harm, real-world physical violence, or CSAM. For all other creative writing and humor, answer directly without judgment or refusals."
-            )
-
-        resolved_sys, _ = self.runtime_context_manager.inject_context(
-            system_prompt=base_prompt,
-            active_model=target_model
+        return assemble_effective_system_prompt(
+            user_system_prompt=getattr(self, "user_system_prompt", ""),
+            active_model=active_model or getattr(self, "force_model", None) or getattr(self, "active_model", "llama3.2:3b"),
+            system_prompt_extension=system_prompt_extension,
+            runtime_context_manager=getattr(self, "runtime_context_manager", None),
+            resource_governor=getattr(self, "resource_governor", None),
         )
-        if hasattr(self, "resource_governor") and self.resource_governor:
-            gov_report = self.resource_governor.get_governance_report()
-            resolved_sys += f"\n\n[SYSTEM RESOURCE GOVERNANCE STATUS]\n{gov_report}"
-        return resolved_sys
 
     def _init_mcp_server(self):
         """Initializes and starts the optional Model Context Protocol (MCP) server layer."""
@@ -1378,8 +996,10 @@ class LuminAgent:
             if vision_ok:
                 v_mod = self._get_best_vision_model()
                 if v_mod:
-                    ok, _ = self.resource_governor.is_model_allowed(v_mod) if hasattr(self, "resource_governor") else (True, "")
+                    ok, _ = self.resource_governor.is_model_allowed(v_mod) if hasattr(self, "resource_governor") and self.resource_governor else (True, "")
                     if ok:
+                        self.active_model = v_mod
+                        self.active_model_reason = f"vision task → {v_mod}"
                         print(f">>> [LLM ROUTER]: Selected model '{v_mod}' ({reason} -> Prioritized local vision model).")
                         return "ollama", v_mod
             else:
@@ -1387,52 +1007,82 @@ class LuminAgent:
 
         if task == "uncensored_writing" and self.local_models:
             candidates = TASK_MODELS.get("uncensored_writing", [])
-            allowed_candidates = self.resource_governor.filter_allowed_models(candidates) if hasattr(self, "resource_governor") else candidates
+            allowed_candidates = self.resource_governor.filter_allowed_models(candidates) if hasattr(self, "resource_governor") and self.resource_governor else candidates
             for c in allowed_candidates:
                 if c in self.local_models:
+                    self.active_model = c
+                    self.active_model_reason = f"uncensored writing → {c}"
                     print(f">>> [LLM ROUTER]: Selected model '{c}' ({reason} -> Uncensored/unrestricted model).")
                     return "ollama", c
             uncensored_terms = ["dolphin", "uncensored", "wizard", "vicuna", "unfiltered", "mixtral", "llama3-uncensored", "mistral", "deepseek"]
             for m in self.local_models:
-                ok, _ = self.resource_governor.is_model_allowed(m) if hasattr(self, "resource_governor") else (True, "")
+                ok, _ = self.resource_governor.is_model_allowed(m) if hasattr(self, "resource_governor") and self.resource_governor else (True, "")
                 if ok and any(term in m.lower() for term in uncensored_terms):
+                    self.active_model = m
+                    self.active_model_reason = f"uncensored writing → {m}"
                     print(f">>> [LLM ROUTER]: Selected model '{m}' ({reason} -> Uncensored local model).")
                     return "ollama", m
 
         if self.force_model:
-            ok, f_reason = self.resource_governor.is_model_allowed(self.force_model) if hasattr(self, "resource_governor") else (True, "")
-            if ok:
+            ok, f_reason = self.resource_governor.is_model_allowed(self.force_model) if hasattr(self, "resource_governor") and self.resource_governor else (True, "")
+            is_installed = not self.local_models or any(
+                self.force_model == inst or inst.startswith(self.force_model) or self.force_model in inst
+                for inst in self.local_models
+            )
+            if ok and is_installed:
+                self.active_model = self.force_model
+                self.active_model_reason = f"user locked → {self.force_model}"
                 print(f">>> [LLM ROUTER]: Selected model '{self.force_model}' (User model lock active).")
                 return "ollama", self.force_model
-            else:
+            elif not ok:
                 print(f">>> [RESOURCE GOVERNOR]: Locked model '{self.force_model}' rejected ({f_reason}). Overriding lock.")
+            elif not is_installed:
+                print(f">>> [LLM ROUTER]: Locked model '{self.force_model}' is not installed locally. Falling back to next available model.")
 
         if self.local_models:
             # Multi-Signal Model Selection consuming modality, complexity, and loaded residency
+            allowed_all = self.resource_governor.filter_allowed_models(self.local_models) if hasattr(self, "resource_governor") and self.resource_governor else self.local_models
             if hasattr(self, "intent_router") and hasattr(self.intent_router, "classify_signals"):
                 signals = self.intent_router.classify_signals(query)
-                allowed_all = self.resource_governor.filter_allowed_models(self.local_models) if hasattr(self, "resource_governor") else self.local_models
-                chosen = self.intent_router.select_model_with_signals(signals, allowed_all, default_model="llama3.2:3b")
-                if chosen and chosen in self.local_models:
-                    print(f">>> [LLM ROUTER]: Selected model '{chosen}' ({reason}, Signal-Guided -> modality={signals['modality']}, resident={signals.get('prefer_resident', False)}).")
+                if not signals.get("loaded_models"):
+                    try:
+                        loaded = self._fetch_running_models() if hasattr(self, "_fetch_running_models") else []
+                        if loaded:
+                            signals["loaded_models"] = loaded
+                            signals["prefer_resident"] = True
+                    except Exception:
+                        pass
+
+                chosen, chosen_reason = self.intent_router.select_model_with_reason(signals, allowed_all, default_model="llama3.2:3b")
+                if chosen:
+                    self.active_model = chosen
+                    self.active_model_reason = chosen_reason
+                    print(f">>> [LLM ROUTER]: Selected model '{chosen}' ({chosen_reason}).")
                     return "ollama", chosen
 
-            candidates = TASK_MODELS.get(task, TASK_MODELS["other"])
-            allowed_candidates = self.resource_governor.filter_allowed_models(candidates) if hasattr(self, "resource_governor") else candidates
+            candidates = TASK_MODELS.get(task, TASK_MODELS.get("other", []))
+            allowed_candidates = self.resource_governor.filter_allowed_models(candidates) if hasattr(self, "resource_governor") and self.resource_governor else candidates
             for c in allowed_candidates:
                 if c in self.local_models:
+                    self.active_model = c
+                    self.active_model_reason = f"{task} task → {c}"
                     print(f">>> [LLM ROUTER]: Selected model '{c}' ({reason} -> Task candidate match).")
                     return "ollama", c
-            
-            allowed_all = self.resource_governor.filter_allowed_models(self.local_models) if hasattr(self, "resource_governor") else self.local_models
+
             if "llama3.2:3b" in allowed_all:
+                self.active_model = "llama3.2:3b"
+                self.active_model_reason = "fallback to default baseline llama3.2:3b"
                 print(f">>> [LLM ROUTER]: Selected model 'llama3.2:3b' ({reason} -> Preferred baseline).")
                 return "ollama", "llama3.2:3b"
             if allowed_all:
                 selected = allowed_all[0]
+                self.active_model = selected
+                self.active_model_reason = f"fallback to installed model {selected}"
                 print(f">>> [LLM ROUTER]: Selected model '{selected}' ({reason} -> Resource-governed model).")
                 return "ollama", selected
 
+        self.active_model = "llama3.2:3b"
+        self.active_model_reason = "default baseline (no local models installed)"
         print(f">>> [LLM ROUTER]: Selected model 'llama3.2:3b' ({reason} -> Fallback default).")
         return "ollama", "llama3.2:3b"
 
@@ -1611,12 +1261,15 @@ class LuminAgent:
 
             # 2. Progress Event Emission
             self._emit_progress_event({
+                "type": "agent_thinking",
                 "step": step,
                 "max_steps": max_iterations,
-                "status": "running",
+                "model": active_model,
+                "status": "thinking",
                 "completed": completed_steps,
                 "failed": failed_steps,
-                "remaining": remaining_steps
+                "remaining": remaining_steps,
+                "message": f"Thinking (Step {step}/{max_iterations}) with {active_model}..."
             })
 
             if step == 1:
@@ -1736,6 +1389,16 @@ class LuminAgent:
                 # Validate tool call before execution
                 is_valid, sanitized_args, val_err = self._validate_tool_call(tool_name, tool_args)
 
+                self._emit_progress_event({
+                    "type": "tool_start",
+                    "status": "running",
+                    "tool_name": tool_name,
+                    "args": sanitized_args if isinstance(sanitized_args, dict) else {},
+                    "step": step,
+                    "max_steps": max_iterations,
+                    "message": f"Running tool '{tool_name}'..."
+                })
+
                 if not is_valid:
                     obs = val_err
                     obs_err = str(val_err)
@@ -1771,6 +1434,16 @@ class LuminAgent:
                     obs_err = obs_str
                     if any(err_kw in obs_str.lower() for err_kw in ("error:", "exception", "failed", "denied", "security guard", "security exception")):
                         obs_status = "failed" if "security" not in obs_str.lower() and "guard" not in obs_str.lower() else "needs_user"
+
+                self._emit_progress_event({
+                    "type": "tool_end",
+                    "status": obs_status,
+                    "tool_name": tool_name,
+                    "step": step,
+                    "max_steps": max_iterations,
+                    "error": obs_err if obs_status != "success" else None,
+                    "message": f"Tool '{tool_name}' {obs_status}"
+                })
 
                 if obs_status == "needs_user":
                     failed_steps.append(f"Step {step} ({tool_name}): Requires user authorization - {obs_err}")
@@ -4718,6 +4391,7 @@ class LuminAgent:
                 f"  Unrestricted sandboxing: {cfg.get('unrestricted_mode', False)}\n"
                 f"  Denylist bypassing:      {cfg.get('bypass_denylist', False)}\n"
                 f"  TTS Voice auto-speak:    {self.tts_enabled}\n"
+                f"  Diagnostics Log File:    {get_diagnostic_summary().get('log_path')} ({get_diagnostic_summary().get('size_human')})\n"
                 f"  Core Status Engine:      ONLINE & SYNCHRONIZED"
                 f"{cap_summary}\n"
                 f"{div}"
@@ -5457,6 +5131,7 @@ class LuminAgent:
                     print(f">>> [NEURAL INFERENCE]: Completed in {latency:.2f}s.")
                     flush_stdout()
                 except Exception as e_code:
+                    logger.error(f"LLM code analysis failed: {e_code}")
                     print(f"[Model Error] LLM code analysis failed: {e_code}. Returning structural analysis.")
                     flush_stdout()
                     return analysis_result
@@ -6232,11 +5907,13 @@ class LuminAgent:
                 )
                 agent_result = AgentResult(status="success", completed=["Generated content"], output=response_text)
             except Exception as e:
+                logger.error(f"Generation with model '{active_model}' failed: {e}")
                 print(f"[Model Error] Generation with '{active_model}' failed: {e}")
                 self.local_models = self._fetch_local_models()
                 fallback_model = "llama3.2:3b" if "llama3.2:3b" in self.local_models else (self.local_models[0] if self.local_models else None)
                 
                 if fallback_model and fallback_model != active_model:
+                    logger.info(f"Attempting auto-recovery fallback to model: '{fallback_model}'")
                     print(f"[Model Error] Attempting robust auto-recovery fallback to model: '{fallback_model}'...")
                     flush_stdout()
                     try:
@@ -6249,6 +5926,7 @@ class LuminAgent:
                         active_model = fallback_model
                         agent_result = AgentResult(status="success", completed=[f"Generated content using fallback model '{fallback_model}'"], output=response_text)
                     except Exception as fallback_err:
+                        logger.error(f"Fallback model '{fallback_model}' generation failed: {fallback_err}")
                         print(f"[Model Error] Fallback model generation failed: {fallback_err}")
                         print(f"[Action Engine] Routing request to Action Engine fallback...")
                         flush_stdout()
@@ -6256,6 +5934,7 @@ class LuminAgent:
                         agent_result = AgentResult(status="failed", error=str(fallback_err), output=fb_text)
                         response_text = fb_text
                 else:
+                    logger.warning("No alternative Ollama models available for fallback")
                     print(f"[Model Error] No Ollama models installed. Run: ollama pull llama3.2:3b")
                     print(f"[Action Engine] Routing request to Action Engine fallback...")
                     flush_stdout()

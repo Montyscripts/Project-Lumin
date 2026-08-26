@@ -3,7 +3,8 @@
  */
 
 export interface AgentStatusSchema {
-  status?: 'running' | 'completed' | 'failed' | 'thinking' | string;
+  type?: 'tool_start' | 'tool_end' | 'agent_thinking' | 'progress' | 'status' | string;
+  status?: 'running' | 'completed' | 'succeeded' | 'failed' | 'blocked' | 'thinking' | 'needs_user' | string;
   completed?: string[] | number;
   failed?: string[] | number;
   remaining?: string[] | number;
@@ -12,10 +13,15 @@ export interface AgentStatusSchema {
   error?: string;
   tool_name?: string;
   args?: Record<string, any>;
+  step?: number;
+  max_steps?: number;
+  model?: string;
+  reason?: string;
+  message?: string;
 }
 
 /**
- * Attempts to parse a structured status object from raw message text or tool output.
+ * Attempts to parse a structured status object from raw message text, stdout stream, or tool output.
  */
 export function parseStructuredStatus(text: string): AgentStatusSchema | null {
   if (!text) return null;
@@ -26,7 +32,7 @@ export function parseStructuredStatus(text: string): AgentStatusSchema | null {
     try {
       const parsed = JSON.parse(trimmed);
       if (typeof parsed === 'object' && parsed !== null) {
-        if ('status' in parsed || 'completed' in parsed || 'failed' in parsed || 'remaining' in parsed || 'next_action' in parsed || 'output' in parsed || 'error' in parsed) {
+        if ('status' in parsed || 'type' in parsed || 'tool_name' in parsed || 'completed' in parsed || 'failed' in parsed || 'remaining' in parsed || 'next_action' in parsed || 'output' in parsed || 'error' in parsed) {
           return parsed as AgentStatusSchema;
         }
       }
@@ -41,7 +47,7 @@ export function parseStructuredStatus(text: string): AgentStatusSchema | null {
     try {
       const parsed = JSON.parse(jsonBlockMatch[1]);
       if (typeof parsed === 'object' && parsed !== null) {
-        if ('status' in parsed || 'completed' in parsed || 'failed' in parsed || 'remaining' in parsed || 'next_action' in parsed || 'output' in parsed || 'error' in parsed) {
+        if ('status' in parsed || 'type' in parsed || 'tool_name' in parsed || 'completed' in parsed || 'failed' in parsed || 'remaining' in parsed || 'next_action' in parsed || 'output' in parsed || 'error' in parsed) {
           return parsed as AgentStatusSchema;
         }
       }
@@ -50,12 +56,15 @@ export function parseStructuredStatus(text: string): AgentStatusSchema | null {
     }
   }
 
-  // 3. Embedded [STATUS: ...] or [TOOL_RESULT: ...] pattern
-  const statusPatternMatch = text.match(/\[STATUS:\s*(\{[\s\S]*?\})\]/i);
-  if (statusPatternMatch && statusPatternMatch[1]) {
+  // 3. Embedded [PROGRESS] {...}, [PROGRESS: {...}], [STATUS: {...}], [TOOL_START: {...}], [TOOL_END: {...}] patterns
+  const structuredPrefixMatch = text.match(/\[(?:STATUS|PROGRESS|TOOL_START|TOOL_END)[:\s]\s*(\{[\s\S]*?\})\]/i) ||
+                                text.match(/\[PROGRESS\]\s*(\{[\s\S]*?\})/i);
+  if (structuredPrefixMatch && structuredPrefixMatch[1]) {
     try {
-      const parsed = JSON.parse(statusPatternMatch[1]);
-      return parsed as AgentStatusSchema;
+      const parsed = JSON.parse(structuredPrefixMatch[1]);
+      if (typeof parsed === 'object' && parsed !== null) {
+        return parsed as AgentStatusSchema;
+      }
     } catch (e) {
       // ignore
     }

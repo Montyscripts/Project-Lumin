@@ -98,3 +98,16 @@ This document provides solutions for common runtime, setup, and hardware issues,
     ```cmd
     venv\Scripts\pip.exe install --upgrade selenium webdriver-manager
     ```
+
+---
+
+### 9. Structured Diagnostic Logs (`lumin.log`) & Support Telemetry
+- **Log Location**: Root workspace `lumin.log` (or custom path configured in `LUMIN_LOG_FILE`).
+- **Rotation Policy**: Maximum 5 MB per file with automatic rotation maintaining up to 3 backup archives (`lumin.log.1`, `lumin.log.2`, `lumin.log.3`).
+- **Privacy & Security**: All API keys, bearer tokens, passwords, and sensitive user directory paths are automatically scrubbed and redacted by the `SanitizedFormatter` before writing to disk.
+- **Accessing Logs**:
+  - In Terminal / CLI: Run `status` or `diagnostics` to inspect active log size, location, and hardware metrics.
+  - In Web UI: Navigate to **Settings > Advanced & MCP Integration > System Diagnostics & Application Logs** or click **Refresh Diagnostic Logs**.
+  - HTTP API: `GET /api/diagnostics/logs` provides the latest 200 sanitized log entries and status metadata.
+  - Debugging: Set `LUMIN_DEBUG=1` or `LUMIN_DEBUG=true` to enable verbose DEBUG-level stdout streaming and detailed internal execution telemetry.
+

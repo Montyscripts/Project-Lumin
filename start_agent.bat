@@ -17,6 +17,17 @@ echo.
 echo   Starting LUMIN CLI Agent launcher...
 echo   Log written to: %LOG_FILE%
 
+:: ── 0. Initialize Workspace Directories & Config ─────────────────
+if not exist "%CD%\lumin_context" mkdir "%CD%\lumin_context" >nul 2>&1
+if not exist "%CD%\tts_cache" mkdir "%CD%\tts_cache" >nul 2>&1
+if not exist "%CD%\uploads" mkdir "%CD%\uploads" >nul 2>&1
+if not exist "%CD%\memory" mkdir "%CD%\memory" >nul 2>&1
+if not exist "%CD%\agent_config.json" (
+    if exist "%CD%\agent_config.example.json" (
+        copy "%CD%\agent_config.example.json" "%CD%\agent_config.json" >nul 2>&1
+    )
+)
+
 :: ── 1. Virtual Environment / Python Detection ────────────────────
 echo   [1/4] Checking Python environment (Python 3.11, 3.12, 3.13)...
 >>"%LOG_FILE%" echo   [1/4] Checking Python...
@@ -48,6 +59,13 @@ if not exist "%VENV_PY%" (
         python3 -c "import sys; sys.exit(0 if (3, 11) <= sys.version_info[:2] <= (3, 13) else 1)" >nul 2>&1
         if %errorlevel% equ 0 set "BASE_PY=python3"
     )
+
+    if not defined BASE_PY if exist "%LocalAppData%\Programs\Python\Python313\python.exe" set "BASE_PY=%LocalAppData%\Programs\Python\Python313\python.exe"
+    if not defined BASE_PY if exist "%LocalAppData%\Programs\Python\Python312\python.exe" set "BASE_PY=%LocalAppData%\Programs\Python\Python312\python.exe"
+    if not defined BASE_PY if exist "%LocalAppData%\Programs\Python\Python311\python.exe" set "BASE_PY=%LocalAppData%\Programs\Python\Python311\python.exe"
+    if not defined BASE_PY if exist "%ProgramFiles%\Python313\python.exe" set "BASE_PY=%ProgramFiles%\Python313\python.exe"
+    if not defined BASE_PY if exist "%ProgramFiles%\Python312\python.exe" set "BASE_PY=%ProgramFiles%\Python312\python.exe"
+    if not defined BASE_PY if exist "%ProgramFiles%\Python311\python.exe" set "BASE_PY=%ProgramFiles%\Python311\python.exe"
 
     if not defined BASE_PY (
         call :Fatal "No supported Python version (3.11, 3.12, 3.13) found on this machine." "Run 'install_windows.bat' or download Python 3.12 from https://python.org."

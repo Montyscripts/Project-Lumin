@@ -5,10 +5,10 @@ import shutil
 import zipfile
 import tempfile
 import urllib.request
-import logging
 from typing import Tuple, Optional
+from core.diagnostics import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger("utils.ffmpeg")
 
 # Official and reliable static mirrors for Windows 64-bit ffmpeg essentials builds
 FFMPEG_WINDOWS_URLS = [

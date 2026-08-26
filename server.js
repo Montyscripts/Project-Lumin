@@ -14,7 +14,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = process.env.PORT || 3000;
-const isProd = process.env.NODE_ENV === 'production';
+const isProd = process.env.NODE_ENV === 'production' || process.env.NODE_ENV !== 'development';
 const isPlatformEnv = process.env.DISABLE_HMR === 'true' || !!process.env.K_SERVICE;
 
 // Structured Logger Helper
@@ -331,15 +331,23 @@ while True:
 }
 
 // Helper to determine if server should keep running on port 3000 (Cloud Run / hosted / explicit flag)
-function shouldKeepServerAlive() {
+function shouldKeepServerAlive(isExplicitKill = false) {
+  // If explicitly killed by user action, never keep alive on desktop
+  if (isExplicitKill) {
+    if (process.env.K_SERVICE || process.env.GAE_ENV) {
+      return true;
+    }
+    return false;
+  }
+  // If explicitly configured to run 24/7 background mode
   if (process.env.LUMIN_KEEP_SERVER_ALIVE === '1' || process.env.LUMIN_KEEP_SERVER_ALIVE === 'true') {
     return true;
   }
-  // Keep alive ONLY in real hosted cloud environments (e.g. Cloud Run, Google App Engine)
+  // Keep alive ONLY in real hosted cloud container environments (e.g. Cloud Run, Google App Engine)
   if (process.env.K_SERVICE || process.env.GAE_ENV) {
     return true;
   }
-  // Local Node execution defaults to desktop mode (exits on browser close / shutdown)
+  // Local Node execution defaults to desktop mode (exits cleanly when browser/tab closes)
   return false;
 }
 
@@ -389,8 +397,8 @@ function killAgentProcessTree() {
 let isShuttingDown = false;
 
 // Complete desktop teardown helper
-function shutdownDesktopStack(reason = 'client_exit') {
-  // 1. Terminate Python agent process tree
+function shutdownDesktopStack(reason = 'client_exit', isExplicitKill = false) {
+  // 1. Terminate Python agent process tree immediately
   killAgentProcessTree();
 
   // 2. Stop Ollama if explicitly configured
@@ -414,7 +422,7 @@ function shutdownDesktopStack(reason = 'client_exit') {
   clients.clear();
 
   // 5. Check Cloud Run / keep-alive escape hatch
-  if (shouldKeepServerAlive()) {
+  if (shouldKeepServerAlive(isExplicitKill)) {
     console.log(`[Server] Keep-alive active (${process.env.K_SERVICE ? 'Cloud Run' : 'LUMIN_KEEP_SERVER_ALIVE'}) — HTTP remains on port ${PORT}`);
     return;
   }
@@ -422,7 +430,7 @@ function shutdownDesktopStack(reason = 'client_exit') {
   if (isShuttingDown) return;
   isShuttingDown = true;
 
-  console.log(`[Server] Desktop shutdown — exiting Node (reason: ${reason})`);
+  console.log(`[Server] Complete desktop shutdown — freeing port ${PORT} and exiting Node (reason: ${reason})`);
 
   // 6. Close Vite dev server if running
   if (viteDevServer) {
@@ -437,37 +445,42 @@ function shutdownDesktopStack(reason = 'client_exit') {
   const forceExitTimer = setTimeout(() => {
     console.log('[Server] Force exit timeout reached. Exiting Node process.');
     process.exit(0);
-  }, 1000);
+  }, 600);
   forceExitTimer.unref();
 
-  server.close((err) => {
-    if (err) {
-      console.error('[Server] Error during server.close():', err);
-    } else {
-      console.log(`[Server] Port ${PORT} released successfully.`);
-    }
-    setTimeout(() => {
-      process.exit(0);
-    }, 150);
-  });
+  try {
+    server.close((err) => {
+      if (err) {
+        console.error('[Server] Error during server.close():', err);
+      } else {
+        console.log(`[Server] Port ${PORT} released successfully.`);
+      }
+      setTimeout(() => {
+        process.exit(0);
+      }, 50);
+    });
+  } catch (err) {
+    console.error('[Server] Immediate exit fallback:', err);
+    process.exit(0);
+  }
 }
 
 // Helper to handle graceful server shutdown when no clients are active
 function handleClientDisconnect(immediate = false) {
   if (clients.size === 0) {
-    console.log('[Server] No active clients. Starting cleanup timer...');
+    console.log(`[Server] No active clients connected. Initiating shutdown timer (immediate=${immediate})...`);
 
     if (shutdownTimer) {
       clearTimeout(shutdownTimer);
     }
 
-    const graceTime = immediate ? 3500 : 10000; // 3.5s for unload beacon, 10s for normal disconnects / refresh / slow first boot
+    const graceTime = immediate ? 2500 : 4500; // 2.5s for page unload/tab close beacon, 4.5s for socket drop/refresh
 
     shutdownTimer = setTimeout(() => {
       if (clients.size === 0) {
         console.log('[Server] Grace period expired with 0 active clients.');
-        if (!shouldKeepServerAlive()) {
-          shutdownDesktopStack('no_active_clients_timeout');
+        if (!shouldKeepServerAlive(false)) {
+          shutdownDesktopStack('no_active_clients_timeout', false);
         } else {
           console.log(`[Server] Keep-alive active — HTTP remains on port ${PORT}. Stopping idle agent process tree.`);
           killAgentProcessTree();
@@ -483,10 +496,10 @@ function handleClientDisconnect(immediate = false) {
 const heartbeatInterval = setInterval(() => {
   for (const ws of clients) {
     if (ws.isAlive === false) {
-      console.log('[Server] Client heartbeat failed. Terminating socket connection...');
+      console.log('[Server] Client heartbeat missed. Terminating socket...');
       ws.terminate();
       clients.delete(ws);
-      handleClientDisconnect();
+      handleClientDisconnect(true);
       continue;
     }
     ws.isAlive = false;
@@ -495,10 +508,10 @@ const heartbeatInterval = setInterval(() => {
     } catch (e) {
       ws.terminate();
       clients.delete(ws);
-      handleClientDisconnect();
+      handleClientDisconnect(true);
     }
   }
-}, 10000);
+}, 4000);
 heartbeatInterval.unref();
 
 // Attach WebSocket connection to clients list
@@ -934,6 +947,35 @@ app.post('/api/config', (req, res) => {
   }
 });
 
+// Diagnostics & Structured Logs API Endpoint
+app.get('/api/diagnostics/logs', (req, res) => {
+  try {
+    const logPath = process.env.LUMIN_LOG_FILE || path.join(__dirname, 'lumin.log');
+    const exists = fs.existsSync(logPath);
+    let sizeBytes = 0;
+    let lines = [];
+    
+    if (exists) {
+      const stats = fs.statSync(logPath);
+      sizeBytes = stats.size;
+      const raw = fs.readFileSync(logPath, 'utf8');
+      lines = raw.split(/\r?\n/).filter(Boolean).slice(-200); // return last 200 lines
+    }
+
+    res.json({
+      success: true,
+      logPath,
+      exists,
+      sizeBytes,
+      linesCount: lines.length,
+      lines,
+      debugMode: process.env.LUMIN_DEBUG === '1' || process.env.LUMIN_DEBUG === 'true'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Default Context Templates for Initial Setup
 const DEFAULT_USER_CONTEXT = `# USER.md — User Profile & Preferences
 ## Identity
@@ -1303,8 +1345,22 @@ app.get('/api/models', async (req, res) => {
       }
     }
 
+    let activeModelReason = '';
+    if (!isRunning) {
+      activeModelReason = 'Ollama offline · System fail-safe action mode active';
+    } else if (!isAutoRouting) {
+      activeModelReason = `User locked → ${activeModel}`;
+    } else if (runningModels.length > 0) {
+      activeModelReason = `Auto-routing → Preferred resident in VRAM (${runningModels[0]})`;
+    } else if (installedTags.length > 0) {
+      activeModelReason = `Auto-routing → Multi-signal task matching active (${installedTags[0].name})`;
+    } else {
+      activeModelReason = 'Auto-routing → Standby (no local models installed)';
+    }
+
     return res.json({
       activeModel: isAutoRouting ? 'auto' : activeModel,
+      activeModelReason: activeModelReason,
       isAutoRouting: isAutoRouting,
       ollamaRunning: isRunning,
       ollamaHost: ollamaHost,
@@ -1356,6 +1412,76 @@ app.post('/api/models/switch', (req, res) => {
     });
   } catch (err) {
     console.error('[API /api/models/switch Error]:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Preload / Load a model into memory/VRAM
+app.post('/api/models/load', async (req, res) => {
+  try {
+    const { model } = req.body || {};
+    if (!model || typeof model !== 'string') {
+      return res.status(400).json({ error: 'Model name string required.' });
+    }
+    const cleanModel = model.trim();
+    const ollamaHost = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
+    
+    // Call Ollama /api/generate with keep_alive to load model
+    try {
+      const response = await fetch(`${ollamaHost}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: cleanModel,
+          prompt: '',
+          keep_alive: '5m'
+        }),
+      });
+      if (response.ok) {
+        return res.json({ success: true, model: cleanModel, status: 'loaded' });
+      }
+    } catch (fetchErr) {
+      console.warn(`[Server] Preload request failed to connect to Ollama daemon: ${fetchErr.message}`);
+    }
+
+    return res.json({ success: true, model: cleanModel, status: 'requested' });
+  } catch (err) {
+    console.error('[API /api/models/load Error]:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Unload / Stop a model from memory/VRAM
+app.post('/api/models/unload', async (req, res) => {
+  try {
+    const { model } = req.body || {};
+    if (!model || typeof model !== 'string') {
+      return res.status(400).json({ error: 'Model name string required.' });
+    }
+    const cleanModel = model.trim();
+    const ollamaHost = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
+    
+    // Call Ollama /api/generate with keep_alive: 0 to evict from VRAM
+    try {
+      const response = await fetch(`${ollamaHost}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: cleanModel,
+          prompt: '',
+          keep_alive: 0
+        }),
+      });
+      if (response.ok) {
+        return res.json({ success: true, model: cleanModel, status: 'unloaded' });
+      }
+    } catch (fetchErr) {
+      console.warn(`[Server] Unload request failed to connect to Ollama daemon: ${fetchErr.message}`);
+    }
+
+    return res.json({ success: true, model: cleanModel, status: 'requested' });
+  } catch (err) {
+    console.error('[API /api/models/unload Error]:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -1480,19 +1606,37 @@ app.post('/api/models/pull', async (req, res) => {
   }
 });
 
+app.post('/api/client/heartbeat', (req, res) => {
+  res.json({
+    ok: true,
+    clients: clients.size,
+    agentRunning: agentProcess !== null
+  });
+});
+
+app.post('/api/client/disconnect', (req, res) => {
+  console.log('[Server] Client beacon reported tab disconnect/unload.');
+  handleClientDisconnect(true);
+  res.json({ ok: true, status: 'disconnect_registered' });
+});
+
 app.post('/api/shutdown', (req, res) => {
   const isForce = req.query.force === 'true' || req.body?.force === true;
-  console.log(`[Server] Received shutdown request (force=${isForce}).`);
+  console.log(`[Server] Received user shutdown request (force=${isForce}).`);
 
   // Kill agent immediately
   killAgentProcessTree();
 
-  res.json({ ok: true, status: isForce ? 'terminating' : 'scheduled' });
+  res.json({
+    ok: true,
+    status: 'terminating',
+    message: 'Server and agent process tree terminating. Port 3000 released.'
+  });
 
-  // Schedule desktop shutdown so HTTP response can complete and flush to client
-  const delay = isForce ? 100 : 250;
+  // Schedule complete desktop shutdown
+  const delay = isForce ? 50 : 150;
   setTimeout(() => {
-    shutdownDesktopStack(isForce ? 'api_force_shutdown' : 'api_shutdown');
+    shutdownDesktopStack(isForce ? 'api_force_shutdown' : 'api_shutdown', true);
   }, delay);
 });
 

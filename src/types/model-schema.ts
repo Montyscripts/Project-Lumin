@@ -20,6 +20,7 @@ export interface OllamaModelInfo {
 
 export interface ModelSelectorState {
   activeModel: string; // e.g. "llama3.2:3b" or "auto"
+  activeModelReason?: string;
   isAutoRouting: boolean;
   ollamaRunning: boolean;
   ollamaHost: string;

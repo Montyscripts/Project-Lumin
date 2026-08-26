@@ -8,11 +8,10 @@ Forces dynamic fallbacks when measured free memory is low.
 import os
 import shutil
 import platform
-import logging
-import subprocess
 from typing import Dict, Any, List, Tuple, Optional
+from core.diagnostics import get_logger
 
-logger = logging.getLogger("LUMIN.ResourceGovernor")
+logger = get_logger("resource_governor")
 
 try:
     import psutil

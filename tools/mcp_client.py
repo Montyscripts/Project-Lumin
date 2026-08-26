@@ -23,14 +23,9 @@ import subprocess
 import traceback
 import sqlite3
 from typing import Dict, Any, List, Optional
+from core.diagnostics import get_logger
 
-logger = logging.getLogger("lumin.mcp_client")
-if not logger.handlers:
-    handler = logging.StreamHandler(sys.stderr)
-    formatter = logging.Formatter("[%(asctime)s] [LUMIN-MCP-CLIENT] [%(levelname)s] %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
+logger = get_logger("mcp.client")
 
 BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 CONFIG_PATH = os.path.join(BASE_DIR, "external_mcp_servers.json")

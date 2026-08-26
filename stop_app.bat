@@ -15,17 +15,23 @@ powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='py
 :: 2. Terminate any Node.js process running server.js from this project directory
 powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*server.js*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
-:: 4. Optionally stop Ollama if requested via environment variable
+:: 3. Optionally stop Ollama if requested via environment variable
 if "%LUMIN_STOP_OLLAMA_ON_SHUTDOWN%"=="1" (
   echo Stopping Ollama daemon (LUMIN_STOP_OLLAMA_ON_SHUTDOWN=1)...
   powershell -NoProfile -Command "Get-Process -Name 'ollama*' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue" >nul 2>&1
 )
 
-:: 5. Verify port 3000 is released
+:: 4. Verify port 3000 is released
 powershell -NoProfile -Command "$c = New-Object System.Net.Sockets.TcpClient; try { $c.Connect('127.0.0.1', 3000); $c.Close(); exit 1 } catch { exit 0 }" >nul 2>&1
 if %errorlevel% equ 0 (
   echo [SUCCESS] Port 3000 released. All LUMIN services and processes terminated.
 ) else (
-  echo [WARNING] Port 3000 is still bound by an external process.
+  echo.
+  echo [WARNING] Port 3000 is still bound by an external non-LUMIN process.
+  echo To identify and free the occupying process, run:
+  echo   netstat -ano ^| findstr :3000
+  echo   taskkill /PID ^<PID^> /F
+  echo.
 )
 timeout /t 2 /nobreak >nul
+

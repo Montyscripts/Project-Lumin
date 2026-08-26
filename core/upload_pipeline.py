@@ -26,8 +26,9 @@ import datetime
 import zipfile
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Tuple, Optional, Any
+from core.diagnostics import get_logger
 
-logger = logging.getLogger("lumin.upload_pipeline")
+logger = get_logger("upload_pipeline")
 
 
 class UploadMetadata:
@@ -615,15 +616,9 @@ class UploadPipeline:
         """
         ocr_results = {}
         try:
-            import urllib.request
-            import json
-            import base64
-
-            # Check local Ollama vision model
-            req = urllib.request.Request("http://localhost:11434/api/tags", headers={"Content-Type": "application/json"}, method="GET")
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                installed = [m.get("name", "") for m in data.get("models", [])]
+            from llm.providers import get_provider
+            prov = get_provider("ollama")
+            installed = prov.list_models()
 
             vision_candidates = [
                 "minicpm-v:8b", "minicpm-v",
@@ -652,34 +647,20 @@ class UploadPipeline:
                 if not os.path.exists(img_path):
                     continue
                 try:
-                    with open(img_path, "rb") as f:
-                        b64_img = base64.b64encode(f.read()).decode("utf-8")
-
                     v_prompt = (
                         "Transcribe and describe ALL visible text, document titles, form names, headings, resident/owner names, addresses, "
                         "dates, checkboxes, numbers, section titles, and details visible on this page image accurately. "
                         "Provide a clean, comprehensive text transcription of this document page."
                     )
-
-                    payload = {
-                        "model": active_vision,
-                        "prompt": v_prompt,
-                        "images": [b64_img],
-                        "stream": False,
-                        "options": {"temperature": 0.1, "num_predict": 1024}
-                    }
-
-                    v_req = urllib.request.Request(
-                        "http://localhost:11434/api/generate",
-                        data=json.dumps(payload).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
-                        method="POST"
+                    page_text = prov.generate(
+                        prompt=v_prompt,
+                        model=active_vision,
+                        image_path=img_path,
+                        temperature=0.1,
+                        num_predict=1024
                     )
-                    with urllib.request.urlopen(v_req, timeout=40) as v_resp:
-                        res = json.loads(v_resp.read().decode("utf-8"))
-                        page_text = res.get("response", "").strip()
-                        if page_text:
-                            ocr_results[page_num] = page_text
+                    if page_text:
+                        ocr_results[page_num] = page_text
                 except Exception as p_err:
                     logger.warning(f"[Upload Pipeline] Vision transcription failed for page {page_num}: {p_err}")
         except Exception as ex:

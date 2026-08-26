@@ -532,7 +532,8 @@ export class GdmLiveAudioVisuals3D extends LitElement {
   private isLoopRunning = false;
   private scene!: THREE.Scene;
   private renderer!: THREE.WebGLRenderer;
-  private onWindowResizeBound?: () => void;
+  private onWindowResizeBound?: (immediate?: boolean) => void;
+  private windowResizeHandler?: () => void;
   private lastFrameTime = 0;
   private prevTime = 0;
   private visualizerTime = 0;
@@ -647,6 +648,7 @@ export class GdmLiveAudioVisuals3D extends LitElement {
   @property({type: Number}) themeTransitionSpeed = 1.0;
   @property({type: Boolean}) isActive = false;
   @property({type: Boolean}) isSpeaking = false;
+  @property({type: Boolean}) isResizing = false;
   @property({type: Boolean}) showParticles = true;
   @property({type: Boolean}) showMainVisualizer = true;
   @property({type: Number}) globalScale = 1.0;
@@ -901,6 +903,12 @@ export class GdmLiveAudioVisuals3D extends LitElement {
         }
       } else if (this.geometrySource === 'builtin') {
         this.updateVisualizerGeometry();
+      }
+    }
+
+    if (changedProperties.has('isResizing')) {
+      if (!this.isResizing && this.onWindowResizeBound) {
+        this.onWindowResizeBound(true);
       }
     }
   }
@@ -1627,26 +1635,63 @@ export class GdmLiveAudioVisuals3D extends LitElement {
 
     this.composer = composer;
 
-    const onWindowResize = () => {
-      if (!this.canvas) return;
+    let lastResizeW = 0;
+    let lastResizeH = 0;
+    let composerResizeTimer: any = null;
+
+    const onWindowResize = (immediate = false) => {
+      if (!this.canvas || !this.renderer || !this.composer) return;
       const parent = this.parentElement || this;
       const w = parent.clientWidth || window.innerWidth;
       const h = parent.clientHeight || window.innerHeight;
-      if (w === 0 || h === 0) return;
+      if (w <= 0 || h <= 0) return;
 
+      // Update camera aspect immediately to keep 3D view framing consistent without any distortion
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
 
-      // Dynamically calculate optimal pixel ratio to ensure smooth performance under fullscreen/high-res modes
-      this.dPR = w > 1920 ? 1.0 : Math.min(window.devicePixelRatio, 2.0);
-      renderer.setPixelRatio(this.dPR);
-
-      const dPR = renderer.getPixelRatio();
-      if ((backdrop.material as any).isRawShaderMaterial) {
-        (backdrop.material as THREE.RawShaderMaterial).uniforms.resolution.value.set(w * dPR, h * dPR);
+      // Skip full buffer reallocation if dimensions have not changed
+      if (Math.abs(w - lastResizeW) < 1 && Math.abs(h - lastResizeH) < 1) {
+        return;
       }
-      renderer.setSize(w, h);
-      composer.setSize(w, h);
+
+      const performFullResize = () => {
+        if (!this.canvas || !this.renderer || !this.composer) return;
+        const currentParent = this.parentElement || this;
+        const cw = currentParent.clientWidth || window.innerWidth;
+        const ch = currentParent.clientHeight || window.innerHeight;
+        if (cw <= 0 || ch <= 0) return;
+
+        lastResizeW = cw;
+        lastResizeH = ch;
+
+        // Dynamically calculate optimal pixel ratio
+        this.dPR = cw > 1920 ? 1.0 : Math.min(window.devicePixelRatio, 2.0);
+        renderer.setPixelRatio(this.dPR);
+
+        const dPR = renderer.getPixelRatio();
+        if ((backdrop.material as any).isRawShaderMaterial) {
+          (backdrop.material as THREE.RawShaderMaterial).uniforms.resolution.value.set(cw * dPR, ch * dPR);
+        }
+        renderer.setSize(cw, ch, false);
+        composer.setSize(cw, ch);
+      };
+
+      if (immediate || !this.isResizing) {
+        if (composerResizeTimer) {
+          clearTimeout(composerResizeTimer);
+          composerResizeTimer = null;
+        }
+        performFullResize();
+      } else {
+        // While dragging corners or actively resizing, throttle the expensive composer buffer recreation
+        if (composerResizeTimer) {
+          clearTimeout(composerResizeTimer);
+        }
+        composerResizeTimer = setTimeout(() => {
+          performFullResize();
+        }, 80);
+      }
     };
     this.onWindowResizeBound = onWindowResize;
 
@@ -1656,15 +1701,16 @@ export class GdmLiveAudioVisuals3D extends LitElement {
         cancelAnimationFrame(resizeTimeout);
       }
       resizeTimeout = requestAnimationFrame(() => {
-        onWindowResize();
+        onWindowResize(false);
       });
     });
 
     const parentEl = this.parentElement || this;
     this.resizeObserver.observe(parentEl);
 
-    window.addEventListener('resize', onWindowResize);
-    onWindowResize();
+    this.windowResizeHandler = () => onWindowResize(true);
+    window.addEventListener('resize', this.windowResizeHandler);
+    onWindowResize(true);
 
     renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -2639,10 +2685,11 @@ export class GdmLiveAudioVisuals3D extends LitElement {
       } catch (e) {}
     }
 
-    if (this.onWindowResizeBound) {
-      window.removeEventListener('resize', this.onWindowResizeBound);
-      this.onWindowResizeBound = undefined;
+    if (this.windowResizeHandler) {
+      window.removeEventListener('resize', this.windowResizeHandler);
+      this.windowResizeHandler = undefined;
     }
+    this.onWindowResizeBound = undefined;
 
     if (this.scene) {
       this.scene.traverse((object: any) => {

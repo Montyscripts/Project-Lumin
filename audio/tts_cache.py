@@ -1,10 +1,10 @@
 import os
 import hashlib
 import json
-import logging
 import threading
+from core.diagnostics import get_logger
 
-logger = logging.getLogger("lumin.audio")
+logger = get_logger("audio.cache")
 
 class TTSCacheManager:
     """

@@ -321,14 +321,69 @@ export function applyVisualizerPreset(host: any, presetKey: string) {
   host.requestUpdate();
 }
 
+function handleStudioPreviewResizeMouseDown(e: MouseEvent | TouchEvent, host: any) {
+  e.preventDefault();
+  host.isDraggingStudioPreviewResizer = true;
+
+  const isTouch = 'touches' in e;
+  const startY = isTouch ? (e as TouchEvent).touches[0].clientY : (e as MouseEvent).clientY;
+  
+  const stageElem = host.shadowRoot?.querySelector?.('.studio-canvas-stage') as HTMLElement | null;
+  const startHeight = stageElem ? stageElem.getBoundingClientRect().height : (host.previewViewportHeight || 140);
+
+  const handleMouseMove = (moveEvent: MouseEvent | TouchEvent) => {
+    if (!host.isDraggingStudioPreviewResizer) return;
+    const currentY = 'touches' in moveEvent ? (moveEvent as TouchEvent).touches[0].clientY : (moveEvent as MouseEvent).clientY;
+    const deltaY = currentY - startY;
+
+    const minH = 75;
+    const maxH = Math.max(minH + 50, Math.min(550, Math.floor(window.innerHeight * 0.55)));
+    const newHeight = Math.round(Math.max(minH, Math.min(maxH, startHeight + deltaY)));
+
+    host.previewViewportHeight = newHeight;
+    host.previewViewportSize = 'custom';
+    try {
+      localStorage.setItem('project_lumin_settings_preview_height', String(newHeight));
+      localStorage.setItem('project_lumin_settings_preview_size_mode', 'custom');
+    } catch (err) {}
+    host.requestUpdate();
+  };
+
+  const handleMouseUp = () => {
+    host.isDraggingStudioPreviewResizer = false;
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('touchmove', handleMouseMove);
+    window.removeEventListener('mouseup', handleMouseUp);
+    window.removeEventListener('touchend', handleMouseUp);
+    host.requestUpdate();
+  };
+
+  window.addEventListener('mousemove', handleMouseMove);
+  window.addEventListener('touchmove', handleMouseMove, { passive: false });
+  window.addEventListener('mouseup', handleMouseUp);
+  window.addEventListener('touchend', handleMouseUp);
+  host.requestUpdate();
+}
+
 export function renderInterfaceSettingsSection(host: any): TemplateResult {
   const filter = host.activeInterfaceFilter || 'ALL';
-  const viewportHeightMap = {
-    compact: 'clamp(75px, 12vh, 105px)',
-    standard: 'clamp(100px, 17vh, 150px)',
-    expanded: 'clamp(140px, 24vh, 200px)'
-  };
-  const activeViewportHeight = viewportHeightMap[host.previewViewportSize as keyof typeof viewportHeightMap] || 'clamp(100px, 17vh, 150px)';
+
+  if (host.previewViewportHeight === undefined) {
+    const savedHeight = localStorage.getItem('project_lumin_settings_preview_height');
+    const savedMode = localStorage.getItem('project_lumin_settings_preview_size_mode');
+    if (savedHeight && !isNaN(Number(savedHeight))) {
+      host.previewViewportHeight = Number(savedHeight);
+    } else {
+      host.previewViewportHeight = 140;
+    }
+    if (savedMode) {
+      host.previewViewportSize = savedMode;
+    } else {
+      host.previewViewportSize = 'standard';
+    }
+  }
+
+  const currentPreviewHeight = host.previewViewportHeight || 140;
   const themeGlowColor = host.activeTheme === 'custom' 
     ? (host.customMainColor || '#00aaff') 
     : (THEMES[host.activeTheme as keyof typeof THEMES]?.['--glow-color'] || '#00aaff');
@@ -459,37 +514,60 @@ export function renderInterfaceSettingsSection(host: any): TemplateResult {
               </button>
 
               <!-- Viewport Size Switcher -->
-              <div style="display: flex; align-items: center; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 5px; padding: 1px;">
+              <div style="display: flex; align-items: center; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 5px; padding: 1px; gap: 2px;">
                 <button
                   type="button"
-                  title="Compact Viewport (85px)"
+                  id="studio-size-compact-btn"
+                  title="Compact Viewport (90px)"
                   style="background: ${host.previewViewportSize === 'compact' ? 'rgba(56, 189, 248, 0.25)' : 'transparent'}; border: none; color: ${host.previewViewportSize === 'compact' ? '#38bdf8' : '#94a3b8'}; padding: 1px 5px; border-radius: 3px; font-size: 0.66rem; font-weight: 700; cursor: pointer;"
                   @click=${() => {
+                    host.previewViewportHeight = 90;
                     host.previewViewportSize = 'compact';
+                    try {
+                      localStorage.setItem('project_lumin_settings_preview_height', '90');
+                      localStorage.setItem('project_lumin_settings_preview_size_mode', 'compact');
+                    } catch (e) {}
                     soundFX.playClick();
                     host.requestUpdate();
                   }}
                 >S</button>
                 <button
                   type="button"
-                  title="Standard Viewport (125px)"
-                  style="background: ${(host.previewViewportSize === 'standard' || !host.previewViewportSize) ? 'rgba(56, 189, 248, 0.25)' : 'transparent'}; border: none; color: ${(host.previewViewportSize === 'standard' || !host.previewViewportSize) ? '#38bdf8' : '#94a3b8'}; padding: 1px 5px; border-radius: 3px; font-size: 0.66rem; font-weight: 700; cursor: pointer;"
+                  id="studio-size-standard-btn"
+                  title="Standard Viewport (140px)"
+                  style="background: ${(host.previewViewportSize === 'standard' || (!host.previewViewportSize && currentPreviewHeight === 140)) ? 'rgba(56, 189, 248, 0.25)' : 'transparent'}; border: none; color: ${(host.previewViewportSize === 'standard' || (!host.previewViewportSize && currentPreviewHeight === 140)) ? '#38bdf8' : '#94a3b8'}; padding: 1px 5px; border-radius: 3px; font-size: 0.66rem; font-weight: 700; cursor: pointer;"
                   @click=${() => {
+                    host.previewViewportHeight = 140;
                     host.previewViewportSize = 'standard';
+                    try {
+                      localStorage.setItem('project_lumin_settings_preview_height', '140');
+                      localStorage.setItem('project_lumin_settings_preview_size_mode', 'standard');
+                    } catch (e) {}
                     soundFX.playClick();
                     host.requestUpdate();
                   }}
                 >M</button>
                 <button
                   type="button"
-                  title="Expanded Viewport (175px)"
+                  id="studio-size-expanded-btn"
+                  title="Expanded Viewport (220px)"
                   style="background: ${host.previewViewportSize === 'expanded' ? 'rgba(56, 189, 248, 0.25)' : 'transparent'}; border: none; color: ${host.previewViewportSize === 'expanded' ? '#38bdf8' : '#94a3b8'}; padding: 1px 5px; border-radius: 3px; font-size: 0.66rem; font-weight: 700; cursor: pointer;"
                   @click=${() => {
+                    host.previewViewportHeight = 220;
                     host.previewViewportSize = 'expanded';
+                    try {
+                      localStorage.setItem('project_lumin_settings_preview_height', '220');
+                      localStorage.setItem('project_lumin_settings_preview_size_mode', 'expanded');
+                    } catch (e) {}
                     soundFX.playClick();
                     host.requestUpdate();
                   }}
                 >L</button>
+                ${host.previewViewportSize === 'custom' ? html`
+                  <span style="font-size: 0.62rem; color: #38bdf8; font-family: monospace; font-weight: 700; padding: 0 4px;" title="Custom resizable height">
+                    ${currentPreviewHeight}px
+                  </span>
+                ` : ''}
               </div>
             </div>
           </div>
@@ -497,7 +575,7 @@ export function renderInterfaceSettingsSection(host: any): TemplateResult {
           <!-- Interactive 3D Canvas Stage -->
           <div
             class="studio-canvas-stage"
-            style="height: ${activeViewportHeight}; min-height: 75px; width: 100%; position: relative; background: radial-gradient(circle at center, rgba(15, 23, 42, 0.4) 0%, rgba(3, 7, 18, 0.95) 100%); overflow: hidden;"
+            style="height: ${currentPreviewHeight}px; min-height: 75px; max-height: 550px; width: 100%; position: relative; background: radial-gradient(circle at center, rgba(15, 23, 42, 0.4) 0%, rgba(3, 7, 18, 0.95) 100%); overflow: hidden; transition: ${host.isDraggingStudioPreviewResizer ? 'none' : 'height 0.15s cubic-bezier(0.16, 1, 0.3, 1)'};"
           >
             <gdm-live-audio-visuals-3d
               .isActive=${true}
@@ -704,6 +782,33 @@ export function renderInterfaceSettingsSection(host: any): TemplateResult {
                 ${activeShadersCount} FX
               </span>
             </div>
+          </div>
+
+          <!-- Interactive Resizer Handle Bar for Studio 3D Canvas -->
+          <div
+            class="studio-preview-resizer ${host.isDraggingStudioPreviewResizer ? 'dragging' : ''}"
+            id="studio-preview-resizer-handle"
+            @mousedown=${(e: MouseEvent) => handleStudioPreviewResizeMouseDown(e, host)}
+            @touchstart=${(e: TouchEvent) => handleStudioPreviewResizeMouseDown(e, host)}
+            @dblclick=${() => {
+              host.previewViewportHeight = 140;
+              host.previewViewportSize = 'standard';
+              try {
+                localStorage.setItem('project_lumin_settings_preview_height', '140');
+                localStorage.setItem('project_lumin_settings_preview_size_mode', 'standard');
+              } catch (e) {}
+              soundFX.playClick();
+              host.requestUpdate();
+            }}
+            title="Drag to resize 3D preview window • Double-click to reset (140px)"
+            style="height: 10px; width: 100%; cursor: ns-resize; display: flex; align-items: center; justify-content: center; background: ${host.isDraggingStudioPreviewResizer ? 'rgba(56, 189, 248, 0.35)' : 'rgba(0, 0, 0, 0.55)'}; border-top: 1px solid ${host.isDraggingStudioPreviewResizer ? 'rgba(56, 189, 248, 0.7)' : 'rgba(255, 255, 255, 0.08)'}; transition: background 0.15s, border-color 0.15s; user-select: none; touch-action: none; position: relative;"
+          >
+            <div style="width: 38px; height: 3px; border-radius: 2px; background: ${host.isDraggingStudioPreviewResizer ? '#38bdf8' : 'rgba(255, 255, 255, 0.3)'}; box-shadow: ${host.isDraggingStudioPreviewResizer ? '0 0 8px #38bdf8' : 'none'}; pointer-events: none;"></div>
+            ${host.isDraggingStudioPreviewResizer ? html`
+              <div style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: rgba(8, 12, 22, 0.95); border: 1px solid #38bdf8; border-radius: 4px; padding: 1px 6px; font-size: 0.65rem; color: #38bdf8; font-family: monospace; font-weight: 700; pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,0.5);">
+                📐 ${currentPreviewHeight}px
+              </div>
+            ` : ''}
           </div>
         </div>
 

@@ -118,6 +118,153 @@ export function renderModelSettingsSection(host: any): TemplateResult {
       </div>
     </div>
 
+    <!-- Section 2: Model Manager & VRAM Lifecycle Status -->
+    <div class="form-section" id="model-manager-lifecycle-section">
+      <div class="form-section-header">
+        <h4 class="form-section-title">
+          <span class="section-icon">📦</span> Model Manager & VRAM Lifecycle
+        </h4>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <button
+            type="button"
+            class="config-btn"
+            id="btn-refresh-model-manager"
+            style="padding: 3px 8px; font-size: 0.74rem;"
+            @click=${() => {
+              soundFX.playClick();
+              fetch('/api/models')
+                .then(r => r.json())
+                .then(data => {
+                  if (data && data.models) {
+                    host.models = data.models;
+                    host.runningModels = data.runningModels || [];
+                    host.requestUpdate();
+                  }
+                })
+                .catch(() => {});
+            }}>
+            ⟳ Scan Status
+          </button>
+        </div>
+      </div>
+
+      <p class="setting-desc" style="margin-top: 0;">
+        Track locally installed neural weights, monitor active VRAM memory residency, and preload/unload models for zero-latency execution.
+      </p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-top: 10px;">
+        ${(host.models || []).filter((m: any) => m.isInstalled !== false).map((m: any) => {
+          const isModelActive = !isCurrentAuto && (host.activeModelName === m.name || host.ollamaModel === m.name);
+          const isLoaded = (host.runningModels || []).some((r: string) => r === m.name || m.name.startsWith(r) || r.startsWith(m.name)) || m.isLoadedInVram;
+
+          return html`
+            <div
+              id="model-manager-card-${m.name.replace(/[^a-zA-Z0-9]/g, '-')}"
+              style="background: rgba(255, 255, 255, 0.03); border: 1px solid ${isModelActive ? 'var(--glow-color, #00aaff)' : isLoaded ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255, 255, 255, 0.08)'}; border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px;">
+              <div>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px;">
+                  <div>
+                    <div style="font-weight: 700; color: #ffffff; font-size: 0.88rem;">${m.displayName || m.name}</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.70rem; color: #94a3b8; margin-top: 1px;">${m.name}</div>
+                  </div>
+                  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px;">
+                    ${isLoaded ? html`
+                      <span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.4); color: #4ade80; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;">
+                        ⚡ In VRAM
+                      </span>
+                    ` : html`
+                      <span style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #94a3b8; font-size: 0.65rem; font-weight: 600; padding: 2px 6px; border-radius: 4px;">
+                        Disk Only
+                      </span>
+                    `}
+                    ${isModelActive ? html`
+                      <span style="background: rgba(0, 170, 255, 0.15); border: 1px solid rgba(0, 170, 255, 0.4); color: #38bdf8; font-size: 0.62rem; font-weight: 700; padding: 1px 5px; border-radius: 3px;">
+                        ✓ ACTIVE
+                      </span>
+                    ` : ''}
+                  </div>
+                </div>
+
+                <div style="display: flex; gap: 8px; font-size: 0.72rem; color: #cbd5e1; margin-top: 6px;">
+                  <span><b>Size:</b> ${m.size || 'N/A'}</span>
+                  <span>•</span>
+                  <span><b>Params:</b> ${m.parameterSize || 'Standard'}</span>
+                  <span>•</span>
+                  <span><b>Speed:</b> ${m.speedRating || 'Fast'}</span>
+                </div>
+              </div>
+
+              <!-- Action Controls -->
+              <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.05);">
+                ${!isLoaded ? html`
+                  <button
+                    type="button"
+                    class="config-btn"
+                    style="padding: 2px 8px; font-size: 0.70rem;"
+                    title="Preload into VRAM for immediate zero-latency inference"
+                    @click=${() => {
+                      soundFX.playClick();
+                      fetch('/api/models/load', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ model: m.name })
+                      }).then(() => {
+                        host.runningModels = [...(host.runningModels || []), m.name];
+                        host.requestUpdate();
+                      }).catch(() => {});
+                    }}>
+                    ⚡ Preload VRAM
+                  </button>
+                ` : html`
+                  <button
+                    type="button"
+                    class="config-btn"
+                    style="padding: 2px 8px; font-size: 0.70rem; color: #fca5a5; border-color: rgba(239, 68, 68, 0.3);"
+                    title="Evict model from GPU memory to free VRAM"
+                    @click=${() => {
+                      soundFX.playClick();
+                      fetch('/api/models/unload', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ model: m.name })
+                      }).then(() => {
+                        host.runningModels = (host.runningModels || []).filter((r: string) => r !== m.name);
+                        host.requestUpdate();
+                      }).catch(() => {});
+                    }}>
+                    ⏏ Unload
+                  </button>
+                `}
+
+                ${!isModelActive ? html`
+                  <button
+                    type="button"
+                    class="config-btn"
+                    style="padding: 2px 8px; font-size: 0.70rem; background: var(--glow-color-faded, rgba(0, 170, 255, 0.2)); border-color: var(--glow-color, #00aaff); color: #ffffff;"
+                    @click=${() => {
+                      host.activeModelName = m.name;
+                      host.ollamaModel = m.name;
+                      host.activePlatform = 'Ollama';
+                      localStorage.setItem('project_lumin_active_model', m.name);
+                      localStorage.setItem('project_lumin_ollama_model', m.name);
+                      fetch('/api/models/switch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ model: m.name })
+                      }).catch(() => {});
+                      soundFX.playCommandAcknowledge();
+                      host.requestUpdate();
+                    }}>
+                    Activate
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        })}
+      </div>
+    </div>
+
     <!-- Section 2: LLM Command & Execution Pipeline -->
     <div class="form-section" id="llm-pipeline-section">
       <div class="form-section-header">

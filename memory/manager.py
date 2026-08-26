@@ -1,10 +1,10 @@
 import os
 import json
 import time
-import logging
 import threading
+from core.diagnostics import get_logger
 
-logger = logging.getLogger("lumin.memory")
+logger = get_logger("memory")
 
 class MemoryManager:
     """

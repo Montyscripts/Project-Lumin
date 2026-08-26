@@ -443,6 +443,26 @@ Execute this job immediately. Provide a complete, polished, and structured respo
     } catch (e) {}
   }
 
+  public recordSkillRun(id: string, name: string, icon: string, success: boolean, summary: string): void {
+    const timestamp = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const res: SkillExecutionResult = {
+      skillId: id,
+      skillName: name,
+      success,
+      outputText: summary,
+      executionTimeMs: 0,
+      timestamp: new Date().toISOString()
+    };
+    this.executionHistory.push(res);
+    const existing = this.getSkillById(id);
+    if (existing) {
+      existing.lastRunAt = timestamp;
+      existing.lastRunStatus = success ? 'success' : 'failed';
+      existing.lastResultSummary = summary;
+    }
+    this.notifyListeners();
+  }
+
   public getExecutionHistory(): SkillExecutionResult[] {
     return this.executionHistory;
   }

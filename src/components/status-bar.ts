@@ -2,7 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { soundFX } from '../sound-effects';
 
-export type SystemAgentState = 'idle' | 'thinking' | 'working' | 'listening' | 'speaking' | 'starting' | 'stopping';
+export type SystemAgentState = 'idle' | 'thinking' | 'working' | 'tool_use' | 'needs_user' | 'error' | 'listening' | 'speaking' | 'starting' | 'stopping';
 export type AppMode = 'voice' | 'agent' | 'settings';
 
 export interface TaskProgressInfo {
@@ -65,6 +65,7 @@ export const AVAILABLE_VOICE_GROUPS = [
 export class LuminStatusBar extends LitElement {
   @property({ type: String }) currentMode: AppMode = 'voice';
   @property({ type: String }) activeModelName = 'llama3.2:3b';
+  @property({ type: String }) activeModelReason = '';
   @property({ type: String }) activePlatform = 'Ollama';
   @property({ type: String }) agentState: SystemAgentState = 'idle';
   @property({ type: Boolean }) isAgentRunning = false;
@@ -86,6 +87,10 @@ export class LuminStatusBar extends LitElement {
   @property({ type: String }) activeSkill = '';
   @property({ type: Number }) activeSkillsCount = 5;
   @property({ type: Object }) lastRunSkill: { id: string; name: string; icon: string; success: boolean; time: string; summary?: string } | null = null;
+  @property({ type: String }) activeToolName: string | null = null;
+  @property({ type: String }) activeToolStatus: 'running' | 'success' | 'failed' | null = null;
+  @property({ type: String }) agentErrorMessage: string | null = null;
+  @property({ type: Boolean }) needsUserConfirmation = false;
 
   @state() private isDetailsOpen = false;
 
@@ -300,6 +305,30 @@ export class LuminStatusBar extends LitElement {
       color: #e9d5ff;
       box-shadow: 0 0 10px rgba(168, 85, 247, 0.25);
       animation: capsule-pulse-purple 1.8s infinite alternate;
+    }
+
+    .agent-status-capsule.tool-use {
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.22), rgba(99, 102, 241, 0.25));
+      border: 1px solid rgba(168, 85, 247, 0.65);
+      color: #e9d5ff;
+      box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);
+      animation: capsule-pulse-purple 1.6s infinite alternate;
+    }
+
+    .agent-status-capsule.needs-user {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.3));
+      border: 1px solid rgba(245, 158, 11, 0.7);
+      color: #fef3c7;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+      animation: capsule-pulse-amber 1.2s infinite alternate;
+    }
+
+    .agent-status-capsule.error {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(185, 28, 28, 0.3));
+      border: 1px solid rgba(239, 68, 68, 0.7);
+      color: #fecaca;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+      animation: capsule-pulse-red 1.2s infinite alternate;
     }
 
     .agent-status-capsule.listening {
@@ -745,7 +774,19 @@ export class LuminStatusBar extends LitElement {
     let activityClass = 'standby';
     let activityIcon = html`<span class="status-dot grey"></span>`;
 
-    if (this.agentState === 'thinking' || this.isGeneratingResponse) {
+    if (this.agentState === 'error' || this.agentErrorMessage) {
+      activityLabel = this.agentErrorMessage ? `Error: ${this.agentErrorMessage.slice(0, 26)}` : 'Agent Error';
+      activityClass = 'error';
+      activityIcon = html`<span class="status-dot red pulse"></span>`;
+    } else if (this.agentState === 'needs_user' || this.needsUserConfirmation) {
+      activityLabel = 'Awaiting User Input';
+      activityClass = 'needs-user';
+      activityIcon = html`<span style="font-size: 0.75rem;">⚠️</span>`;
+    } else if (this.agentState === 'tool_use' || this.activeToolName) {
+      activityLabel = this.activeToolName ? `Tool: ${this.activeToolName}` : 'Executing Tool...';
+      activityClass = 'tool-use';
+      activityIcon = html`<div class="spinner-icon" style="color: #c084fc;"></div>`;
+    } else if (this.agentState === 'thinking' || this.isGeneratingResponse) {
       activityLabel = 'Thinking...';
       activityClass = 'thinking';
       activityIcon = html`<div class="spinner-icon" style="color: #fef08a;"></div>`;
@@ -786,9 +827,9 @@ export class LuminStatusBar extends LitElement {
       activityIcon = html`<span class="status-dot grey"></span>`;
     }
 
-    const hasActiveTask = this.isGeneratingResponse || this.isStartingAgent || !!this.taskProgress;
-    const taskTitle = this.taskProgress?.taskName || (this.isGeneratingResponse ? 'Generating Cognitive Response' : this.isStartingAgent ? 'Initializing Agent Runtime' : 'Agent Background Task');
-    const taskStep = this.taskProgress?.stepDescription || (this.isGeneratingResponse ? 'Synthesizing response...' : this.isStartingAgent ? 'Establishing WebSocket stream...' : 'Executing command...');
+    const hasActiveTask = this.isGeneratingResponse || this.isStartingAgent || !!this.taskProgress || !!this.activeToolName;
+    const taskTitle = this.activeToolName ? `Tool: ${this.activeToolName}` : (this.taskProgress?.taskName || (this.isGeneratingResponse ? 'Generating Cognitive Response' : this.isStartingAgent ? 'Initializing Agent Runtime' : 'Agent Background Task'));
+    const taskStep = this.taskProgress?.stepDescription || (this.activeToolName ? `Executing tool '${this.activeToolName}'...` : (this.isGeneratingResponse ? 'Synthesizing response...' : this.isStartingAgent ? 'Establishing WebSocket stream...' : 'Executing command...'));
     const progressPercent = this.taskProgress?.progressPercent;
 
     return html`
@@ -841,8 +882,19 @@ export class LuminStatusBar extends LitElement {
             </div>
           </div>
 
-          <!-- Right: System Diagnostic Tools -->
+          <!-- Right: System Diagnostic Tools & Active Model Indicator -->
           <div class="status-right-group">
+            <!-- Active Model Indicator (Directly Visible) -->
+            <div 
+              class="status-chip model-chip interactive" 
+              @click=${this.handleModelClick}
+              title="Active Model: ${this.activeModelName} (${this.activePlatform})${this.activeModelReason ? ` — Reason: ${this.activeModelReason}` : ''} (Click to switch model)"
+            >
+              <span style="color: #38bdf8; font-size: 0.72rem;">🧠</span>
+              <span style="font-weight: 700; max-width: 105px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this.activeModelName}</span>
+              <span class="platform-tag ${this.activePlatform.toLowerCase().includes('cloud') ? 'cloud' : 'ollama'}">${this.activePlatform}</span>
+            </div>
+
             <!-- Diagnostics Toggle -->
             <button 
               class="status-chip interactive" 
@@ -859,8 +911,26 @@ export class LuminStatusBar extends LitElement {
 
         </div>
 
+        <!-- Error Banner Ribbon (Visible when agent error is present) -->
+        ${this.agentErrorMessage ? html`
+          <div class="task-progress-ribbon" id="error-banner" style="background: rgba(45, 12, 12, 0.96); border-top: 1px solid rgba(239, 68, 68, 0.45);">
+            <div class="task-info-group">
+              <div class="task-name-text" style="color: #f87171; display: flex; align-items: center; gap: 4px;">
+                <span>⚠️</span>
+                <span>System Error</span>
+              </div>
+              <div class="task-step-text" style="color: #fca5a5;" title="${this.agentErrorMessage}">
+                ${this.agentErrorMessage}
+              </div>
+            </div>
+            <button class="cancel-task-btn" style="background: rgba(239, 68, 68, 0.3); border-color: rgba(239, 68, 68, 0.6); color: #ffffff;" @click=${() => this.dispatchEvent(new CustomEvent('clear-error', { bubbles: true, composed: true }))} title="Dismiss Error Banner">
+              Dismiss
+            </button>
+          </div>
+        ` : ''}
+
         <!-- Task Progress Ribbon (Visible during thinking, background executions, or agent tasks) -->
-        ${(hasActiveTask || this.showTaskProgress) ? html`
+        ${(!this.agentErrorMessage && (hasActiveTask || this.showTaskProgress)) ? html`
           <div class="task-progress-ribbon" id="task-progress-banner">
             <div class="task-info-group">
               <div class="task-name-text">
@@ -955,11 +1025,16 @@ export class LuminStatusBar extends LitElement {
 
             <!-- Personal Agent Runtime Stack (Model -> Context -> Skills -> Harness) -->
             <div class="details-grid">
-              <div class="details-item">
-                <div class="details-label">1. Brain / Model</div>
+              <div class="details-item" style="grid-column: span 2;">
+                <div class="details-label">1. Brain / Active Model</div>
                 <div class="details-val" style="color: #38bdf8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${this.activeModelName} (${this.activePlatform})">
                   ${this.activeModelName}
                 </div>
+                ${this.activeModelReason ? html`
+                  <div style="font-size: 0.63rem; color: #93c5fd; margin-top: 2px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${this.activeModelReason}">
+                    🎯 ${this.activeModelReason}
+                  </div>
+                ` : ''}
               </div>
               <div class="details-item">
                 <div class="details-label">2. Context Layer</div>

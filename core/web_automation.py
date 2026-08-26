@@ -14,10 +14,10 @@ import logging
 import subprocess
 import urllib.parse
 import urllib.request
-import webbrowser
 from typing import Dict, Any, List, Optional, Tuple
+from core.diagnostics import get_logger
 
-logger = logging.getLogger("LUMIN.WebAutomation")
+logger = get_logger("web_automation")
 
 try:
     from tools.registry import ToolResult, _tool_result_to_display

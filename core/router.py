@@ -10,10 +10,9 @@ import os
 import sys
 import json
 import urllib.request
-import logging
-from tools.registry import _tool_result_to_display
+from core.diagnostics import get_logger
 
-logger = logging.getLogger("LUMIN")
+logger = get_logger("router")
 
 
 class ModalityType(str, Enum):
@@ -45,12 +44,20 @@ class IntentRouter:
     and executes application commands directly without invoking LLM inference.
     """
 
-    def __init__(self, agent=None):
+    def __init__(self, agent=None, provider=None):
         self.agent = agent
+        self.provider = provider or (getattr(agent, "provider", None) if agent else None) or (getattr(agent, "ollama_client", None) if agent else None)
         self.ollama_host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
     def get_loaded_models(self) -> list[str]:
-        """Queries Ollama /api/ps to inspect active in-memory models (skips gracefully on error)."""
+        """Queries active in-memory resident models via provider or direct /api/ps fallback."""
+        if self.provider and hasattr(self.provider, "get_loaded_models"):
+            try:
+                models = self.provider.get_loaded_models()
+                if models:
+                    return models
+            except Exception:
+                pass
         try:
             req = urllib.request.Request(
                 f"{self.ollama_host}/api/ps",
@@ -63,6 +70,15 @@ class IntentRouter:
         except Exception:
             pass
         return []
+
+    def get_model_capabilities(self, model_name: str = None):
+        """Hook to query model capabilities from active provider or fallback logic."""
+        if self.provider and hasattr(self.provider, "get_capabilities"):
+            return self.provider.get_capabilities(model_name)
+        if self.agent and hasattr(self.agent, "provider") and self.agent.provider:
+            return self.agent.provider.get_capabilities(model_name)
+        from llm.providers.ollama import OllamaProvider
+        return OllamaProvider(base_url=self.ollama_host).get_capabilities(model_name)
 
     def classify_signals(self, query: str, has_image: bool = False, has_doc: bool = False) -> dict:
         """
@@ -171,6 +187,77 @@ class IntentRouter:
         if default_model in installed_models:
             return default_model
         return installed_models[0]
+
+    def select_model_with_reason(
+        self,
+        signals: dict,
+        installed_models: list[str],
+        default_model: str = "llama3.2:3b"
+    ) -> tuple[str, str]:
+        """
+        Consumes modality, complexity, and loaded residency signals to select the best Ollama model
+        and produces a human-readable explanation of why the model was chosen.
+        """
+        if not installed_models:
+            return default_model, "default baseline (no local models installed)"
+
+        modality = signals.get("modality", ModalityType.TEXT)
+        complexity = signals.get("complexity", TaskComplexity.STANDARD)
+        loaded_models = signals.get("loaded_models", [])
+
+        # Tier candidates by modality & complexity
+        if modality == ModalityType.IMAGE_VISION:
+            gemma4_installed = [m for m in installed_models if "gemma4" in m.lower()]
+            candidates = [
+                "minicpm-v:8b", "minicpm-v",
+                "gemma4:e4b", "gemma4:12b", "gemma4"
+            ] + gemma4_installed + [
+                "qwen2.5vl:7b", "llava:7b", "qwen2.5vl", "llava"
+            ]
+            primary_intent = "vision task"
+        elif modality == ModalityType.CODE and complexity in (TaskComplexity.STANDARD, TaskComplexity.COMPLEX):
+            candidates = ["qwen2.5-coder:7b", "codegemma:7b", "qwen2.5-coder", "qwen2.5:7b", "mistral:7b"]
+            primary_intent = "coding task"
+        elif modality == ModalityType.DOCUMENT:
+            candidates = ["phi4-mini", "qwen2.5:7b", "llama3.2:3b", "mistral:7b"]
+            primary_intent = "document processing"
+        elif complexity == TaskComplexity.TRIVIAL:
+            candidates = ["llama3.2:3b", "phi4-mini", "gemma3:4b", "qwen2.5:7b"]
+            primary_intent = "fast response"
+        else:
+            candidates = ["qwen2.5:7b", "phi4-mini", "llama3.2:3b", "mistral:7b"]
+            primary_intent = "general reasoning"
+
+        preferred_cand = candidates[0] if candidates else default_model
+
+        # 1. Prefer candidate already resident in VRAM
+        if signals.get("prefer_resident", False) and loaded_models:
+            for cand in candidates:
+                for loaded in loaded_models:
+                    if cand in loaded and any(cand in inst for inst in installed_models):
+                        for inst in installed_models:
+                            if cand in inst:
+                                return inst, f"{primary_intent} → {inst} (resident in VRAM)"
+
+        # 2. Match candidate against installed local models
+        for cand in candidates:
+            for inst in installed_models:
+                if cand in inst or inst.startswith(cand):
+                    if cand == preferred_cand:
+                        return inst, f"{primary_intent} → {inst}"
+                    else:
+                        return inst, f"preferred {preferred_cand} missing → fallback {inst}"
+
+        # 3. If a resident model is already loaded and no candidate matched, prefer resident
+        if signals.get("prefer_resident", False) and loaded_models:
+            for loaded in loaded_models:
+                if loaded in installed_models:
+                    return loaded, f"fallback to resident model {loaded}"
+
+        # 4. Fallback to default baseline
+        if default_model in installed_models:
+            return default_model, f"fallback to default baseline {default_model}"
+        return installed_models[0], f"fallback to installed model {installed_models[0]}"
 
     def clean_input(self, user_input: str) -> str:
         """Strip input artifacts like 'You:', '[User]:' etc and trailing punctuation."""

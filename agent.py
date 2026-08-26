@@ -35,8 +35,17 @@ except ImportError:
     console = DummyConsole()
 
 try:
+    from core.diagnostics import setup_logging, get_logger
+    setup_logging()
+    logger = get_logger("entry")
+except Exception:
+    logger = None
+
+try:
     from core.agent import LuminAgent
 except ImportError as e:
+    if logger:
+        logger.critical(f"Failed to import core modules: {e}", exc_info=True)
     print(f"\n[Bootstrap Error] Failed to import core modules: {e}")
     print("Please ensure core/, memory/, tools/, llm/, audio/, and utils/ directories exist.")
     sys.exit(1)
@@ -56,6 +65,8 @@ def main():
         
         agent.run_stdin_loop()
     except Exception as e:
+        if logger:
+            logger.critical(f"Agent crashed on start: {e}", exc_info=True)
         print(f"\n[Fatal System Error] Agent crashed on start: {e}")
         print("\n" + "=" * 76)
         print(" Python Traceback:")

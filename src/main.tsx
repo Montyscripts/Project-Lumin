@@ -91,6 +91,8 @@ type TranscriptionEntry = {
 
 @customElement('gdm-live-audio')
 export class GdmLiveAudio extends LitElement {
+  @state() private isServerTerminated = false;
+  private clientPulseInterval: number | null = null;
   @state() private currentTab: 'voice' | 'agent' | 'settings' = (() => {
     const saved = localStorage.getItem('project_lumin_active_tab');
     return (saved === 'agent' || saved === 'settings') ? saved : 'voice';
@@ -98,6 +100,9 @@ export class GdmLiveAudio extends LitElement {
   @state() private isVisualizerPipMinimized = localStorage.getItem('project_lumin_pip_minimized') === 'true';
   @state() private agentVisMode: 'compact' | 'minimal' | 'hidden' = (localStorage.getItem('project_lumin_agent_vis_mode') as any) || 'compact';
   @state() private agentPipCorner: 'top-right' | 'top-left' = (localStorage.getItem('project_lumin_agent_pip_corner') as any) || 'top-right';
+  @state() private agentPipWidth = Math.max(180, Number(localStorage.getItem('project_lumin_agent_pip_width') || '270'));
+  @state() private agentPipHeight = Math.max(120, Number(localStorage.getItem('project_lumin_agent_pip_height') || '180'));
+  @state() private isDraggingAgentPipResizer = false;
   @state() private agentPipPos: { x: number; y: number } | null = (() => {
     try {
       const saved = localStorage.getItem('project_lumin_agent_pip_pos');
@@ -196,6 +201,7 @@ export class GdmLiveAudio extends LitElement {
   @state() isSettingsOpen = false;
   @state() private activePlatform = 'Ollama';
   @state() private activeModelName = 'llama3.2:3b';
+  @state() private activeModelReason = '';
   @state() private ollamaModel = 'llama3';
   @state() private unrestrictedMode = localStorage.getItem('project_lumin_unrestricted_mode') === 'true';
   @state() private piperVoice = localStorage.getItem('project_lumin_piper_voice') || 'en-US-JennyNeural';
@@ -317,7 +323,9 @@ export class GdmLiveAudio extends LitElement {
   @state() prismaticDispersionEnabled = false;
   @state() prismaticSpread = 0.015;
   @state() previewSimulateAudio = true;
-  @state() previewViewportSize: 'compact' | 'standard' | 'expanded' = 'standard';
+  @state() previewViewportSize: 'compact' | 'standard' | 'expanded' | 'custom' = (localStorage.getItem('project_lumin_settings_preview_size_mode') as any) || 'standard';
+  @state() previewViewportHeight = Number(localStorage.getItem('project_lumin_settings_preview_height') || '140');
+  @state() isDraggingStudioPreviewResizer = false;
   @state() previewPinned = true;
   @state() glowPulseStrength = 0.0;
   @state() themeTransitionSpeed = 1.0;
@@ -632,6 +640,10 @@ export class GdmLiveAudio extends LitElement {
   }
   @state() private isGeneratingResponse = false;
   @state() private responseTimer = 0;
+  @state() private activeToolName: string | null = null;
+  @state() private activeToolStatus: 'running' | 'success' | 'failed' | null = null;
+  @state() private agentErrorMessage: string | null = null;
+  @state() private needsUserConfirmation = false;
   private responseTimerInterval: number | null = null;
 
   private startResponseTimer() {
@@ -4594,7 +4606,7 @@ export class GdmLiveAudio extends LitElement {
 
     /* Visualizer Dynamic Stage Positioning */
     .visualizer-stage {
-      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: opacity 0.15s ease, box-shadow 0.18s ease, border-color 0.18s ease, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     /* Voice Mode: Fullscreen 3D Scene - Large, Central, Signature */
@@ -4611,6 +4623,18 @@ export class GdmLiveAudio extends LitElement {
       inset: 0;
       pointer-events: none;
       z-index: 10;
+      animation: surfaceFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes surfaceFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(3px) scale(0.998);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
     }
 
     .voice-mode-overlay .hud {
@@ -4636,8 +4660,6 @@ export class GdmLiveAudio extends LitElement {
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      max-height: min(180px, calc(100% - 240px));
-      max-width: min(270px, calc(100% - 24px));
       pointer-events: auto;
       touch-action: none;
       transition: box-shadow 0.25s ease, border-color 0.25s ease, opacity 0.2s ease;
@@ -4648,7 +4670,7 @@ export class GdmLiveAudio extends LitElement {
       user-select: none !important;
       box-shadow: 0 20px 48px rgba(0, 0, 0, 0.95), 0 0 32px rgba(0, 170, 255, 0.5) !important;
       border-color: rgba(0, 170, 255, 0.85) !important;
-      will-change: left, top;
+      will-change: left, top, width, height;
     }
 
     .visualizer-stage.mode-agent.corner-top-left {
@@ -4658,8 +4680,128 @@ export class GdmLiveAudio extends LitElement {
     }
 
     .visualizer-stage.mode-agent.vis-compact {
-      width: 270px;
-      height: 180px;
+      min-width: 180px;
+      min-height: 120px;
+    }
+
+    .pip-resize-handle {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      display: flex;
+      padding: 2px;
+      color: rgba(255, 255, 255, 0.35);
+      z-index: 30;
+      touch-action: none;
+      user-select: none;
+      transition: color 0.15s ease, transform 0.15s ease;
+    }
+
+    .pip-resize-handle.handle-se {
+      bottom: 0;
+      right: 0;
+      cursor: nwse-resize;
+      align-items: flex-end;
+      justify-content: flex-end;
+    }
+
+    .pip-resize-handle.handle-sw {
+      bottom: 0;
+      left: 0;
+      cursor: nesw-resize;
+      align-items: flex-end;
+      justify-content: flex-start;
+    }
+
+    .pip-resize-handle.handle-ne {
+      top: 0;
+      right: 0;
+      cursor: nesw-resize;
+      align-items: flex-start;
+      justify-content: flex-end;
+    }
+
+    .pip-resize-handle.handle-nw {
+      top: 0;
+      left: 0;
+      cursor: nwse-resize;
+      align-items: flex-start;
+      justify-content: flex-start;
+    }
+
+    .pip-resize-handle:hover,
+    .pip-resize-handle.active {
+      color: var(--glow-color, #38bdf8);
+      transform: scale(1.2);
+    }
+
+    /* Edge Resize Hit Areas */
+    .pip-resize-edge {
+      position: absolute;
+      z-index: 28;
+      touch-action: none;
+      user-select: none;
+      transition: background 0.15s ease;
+    }
+
+    .pip-resize-edge.edge-n {
+      top: 0;
+      left: 18px;
+      right: 18px;
+      height: 6px;
+      cursor: ns-resize;
+    }
+
+    .pip-resize-edge.edge-s {
+      bottom: 0;
+      left: 18px;
+      right: 18px;
+      height: 6px;
+      cursor: ns-resize;
+    }
+
+    .pip-resize-edge.edge-w {
+      left: 0;
+      top: 18px;
+      bottom: 18px;
+      width: 6px;
+      cursor: ew-resize;
+    }
+
+    .pip-resize-edge.edge-e {
+      right: 0;
+      top: 18px;
+      bottom: 18px;
+      width: 6px;
+      cursor: ew-resize;
+    }
+
+    .pip-resize-edge:hover,
+    .pip-resize-edge.active {
+      background: rgba(0, 170, 255, 0.35);
+    }
+
+    .pip-size-badge {
+      position: absolute;
+      bottom: 8px;
+      left: 10px;
+      font-size: 0.65rem;
+      font-family: var(--font-mono, monospace);
+      font-weight: 600;
+      background: rgba(10, 15, 26, 0.85);
+      border: 1px solid rgba(0, 170, 255, 0.3);
+      color: #94a3b8;
+      padding: 2px 6px;
+      border-radius: 4px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      z-index: 24;
+    }
+
+    .visualizer-stage.mode-agent:hover .pip-size-badge,
+    .visualizer-stage.mode-agent.is-dragging .pip-size-badge {
+      opacity: 0.85;
     }
 
     .visualizer-stage.mode-agent.vis-minimal {
@@ -4925,6 +5067,7 @@ export class GdmLiveAudio extends LitElement {
       background: radial-gradient(ellipse at 50% 0%, rgba(14, 24, 42, 0.55) 0%, rgba(8, 10, 15, 0.98) 100%);
       backdrop-filter: blur(8px);
       overflow: hidden;
+      animation: surfaceFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
 
     .agent-workspace-surface.dock-bottom {
@@ -5049,6 +5192,27 @@ export class GdmLiveAudio extends LitElement {
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      animation: surfaceFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .studio-preview-resizer {
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .studio-preview-resizer:hover {
+      background: rgba(56, 189, 248, 0.25) !important;
+      border-top-color: rgba(56, 189, 248, 0.6) !important;
+    }
+    .studio-preview-resizer:hover div:first-child {
+      background: #38bdf8 !important;
+      box-shadow: 0 0 8px #38bdf8 !important;
+    }
+    .studio-preview-resizer.dragging {
+      background: rgba(56, 189, 248, 0.4) !important;
+      border-top-color: rgba(56, 189, 248, 0.9) !important;
+    }
+    .studio-preview-resizer.dragging div:first-child {
+      background: #38bdf8 !important;
+      box-shadow: 0 0 12px #38bdf8 !important;
     }
 
     /* ==========================================================================
@@ -5276,7 +5440,12 @@ export class GdmLiveAudio extends LitElement {
     } catch (e) {}
   }
 
-  private getSystemAgentState(): 'idle' | 'thinking' | 'working' | 'listening' | 'speaking' | 'starting' | 'stopping' {
+  private getSystemAgentState(): 'idle' | 'thinking' | 'working' | 'tool_use' | 'needs_user' | 'error' | 'listening' | 'speaking' | 'starting' | 'stopping' {
+    if (this.agentErrorMessage) return 'error';
+    if (this.needsUserConfirmation) return 'needs_user';
+    if (this.activeToolName || (this.taskProgress && (this.taskProgress.taskName?.toLowerCase().startsWith('tool:') || this.taskProgress.taskName?.toLowerCase().includes('executing')))) {
+      return 'tool_use';
+    }
     if (this.isGeneratingResponse) return 'thinking';
     if (this.taskProgress && this.taskProgress.taskName) return 'working';
     if (this.isRecording) return 'listening';
@@ -5384,8 +5553,8 @@ export class GdmLiveAudio extends LitElement {
     }
     if (this.agentPipPos) {
       const isMinimal = this.agentVisMode === 'minimal';
-      const width = isMinimal ? 172 : 270;
-      const height = isMinimal ? 34 : 180;
+      const width = isMinimal ? 172 : this.agentPipWidth;
+      const height = isMinimal ? 34 : this.agentPipHeight;
 
       const mainElem = this.shadowRoot?.querySelector('.lumin-main-content') as HTMLElement | null;
       const mainRect = mainElem ? mainElem.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
@@ -5432,9 +5601,11 @@ export class GdmLiveAudio extends LitElement {
     }
     try {
       if (navigator.sendBeacon) {
+        navigator.sendBeacon('/api/client/disconnect');
         navigator.sendBeacon('/api/shutdown');
       } else {
-        fetch('/api/shutdown', { method: 'POST', keepalive: true });
+        fetch('/api/client/disconnect', { method: 'POST', keepalive: true }).catch(() => {});
+        fetch('/api/shutdown', { method: 'POST', keepalive: true }).catch(() => {});
       }
     } catch (e) {}
     this.cleanupAllResources();
@@ -6042,6 +6213,15 @@ export class GdmLiveAudio extends LitElement {
     this.shouldStartOnConnect = true;
     this.initTerminalWebSocket(true);
 
+    // Periodic client heartbeat pulse to notify server this browser tab is active
+    if (!this.clientPulseInterval) {
+      this.clientPulseInterval = window.setInterval(() => {
+        if (!this.isServerTerminated) {
+          fetch('/api/client/heartbeat', { method: 'POST' }).catch(() => {});
+        }
+      }, 7000);
+    }
+
     // Fetch initial agent config to synchronize unrestricted_mode
     fetch('/api/config')
       .then(res => res.json())
@@ -6063,9 +6243,11 @@ export class GdmLiveAudio extends LitElement {
       }
       try {
         if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/client/disconnect');
           navigator.sendBeacon('/api/shutdown');
         } else {
-          fetch('/api/shutdown', { method: 'POST', keepalive: true });
+          fetch('/api/client/disconnect', { method: 'POST', keepalive: true }).catch(() => {});
+          fetch('/api/shutdown', { method: 'POST', keepalive: true }).catch(() => {});
         }
       } catch (e) {}
     };
@@ -6079,9 +6261,12 @@ export class GdmLiveAudio extends LitElement {
   private shouldStartOnConnect = false;
 
   private initTerminalWebSocket(forceConnect = false) {
-    if (!forceConnect && !this.isTerminalEnabled && !this.isTerminalOpen && !this.isTerminalTabActive) {
-      console.log('Skipping Terminal WebSocket connection (Terminal is not active/enabled).');
+    if (this.isServerTerminated) {
       return;
+    }
+
+    if (!forceConnect && !this.isTerminalEnabled && !this.isTerminalOpen && !this.isTerminalTabActive) {
+      // Connect in background to register active client session
     }
 
     if (!forceConnect && this.wsTerminal && (this.wsTerminal.readyState === WebSocket.OPEN || this.wsTerminal.readyState === WebSocket.CONNECTING)) {
@@ -6208,7 +6393,76 @@ export class GdmLiveAudio extends LitElement {
           // Parse structured status JSON if present
           const structuredStatus = parseStructuredStatus(cleanData);
           if (structuredStatus) {
-            if (structuredStatus.status === 'running') {
+            if (structuredStatus.type === 'tool_start' || (structuredStatus.tool_name && structuredStatus.status === 'running')) {
+              this.activeToolName = structuredStatus.tool_name || null;
+              this.activeToolStatus = 'running';
+              this.taskProgress = {
+                taskName: `Tool: ${structuredStatus.tool_name}`,
+                stepDescription: structuredStatus.message || `Executing ${structuredStatus.tool_name}...`,
+                currentStep: structuredStatus.step,
+                totalSteps: structuredStatus.max_steps,
+                progressPercent: structuredStatus.max_steps && structuredStatus.step ? Math.round((structuredStatus.step / structuredStatus.max_steps) * 100) : undefined,
+                elapsedSeconds: this.responseTimer,
+                canCancel: true
+              };
+              this.requestUpdate();
+            } else if (structuredStatus.type === 'tool_end' || (structuredStatus.tool_name && (structuredStatus.status === 'succeeded' || structuredStatus.status === 'completed' || structuredStatus.status === 'success' || structuredStatus.status === 'failed' || structuredStatus.status === 'blocked'))) {
+              const isSuccess = structuredStatus.status === 'succeeded' || structuredStatus.status === 'completed' || structuredStatus.status === 'success';
+              this.activeToolStatus = isSuccess ? 'success' : 'failed';
+              if (structuredStatus.tool_name) {
+                skillsManager.recordSkillRun(
+                  structuredStatus.tool_name,
+                  structuredStatus.tool_name,
+                  isSuccess ? '🔧' : '⚠️',
+                  isSuccess,
+                  structuredStatus.error || (isSuccess ? 'Tool executed successfully' : 'Execution failed')
+                );
+              }
+              if (!isSuccess && structuredStatus.error) {
+                this.agentErrorMessage = structuredStatus.error;
+              }
+              this.taskProgress = {
+                taskName: `Tool: ${structuredStatus.tool_name}`,
+                stepDescription: isSuccess ? `✓ Tool '${structuredStatus.tool_name}' completed` : `✗ Tool '${structuredStatus.tool_name}' failed: ${structuredStatus.error || 'Unknown error'}`,
+                currentStep: structuredStatus.step,
+                totalSteps: structuredStatus.max_steps,
+                progressPercent: structuredStatus.max_steps && structuredStatus.step ? Math.round((structuredStatus.step / structuredStatus.max_steps) * 100) : undefined,
+                elapsedSeconds: this.responseTimer,
+                canCancel: true
+              };
+              setTimeout(() => {
+                if (this.activeToolStatus !== 'running') {
+                  this.activeToolName = null;
+                  this.requestUpdate();
+                }
+              }, 2500);
+              this.requestUpdate();
+            } else if (structuredStatus.type === 'agent_thinking' || structuredStatus.status === 'thinking') {
+              this.activeToolName = null;
+              this.activeToolStatus = null;
+              if (structuredStatus.model) {
+                this.activeModelName = structuredStatus.model;
+              }
+              this.taskProgress = {
+                taskName: 'Cognitive Reasoning Loop',
+                stepDescription: structuredStatus.message || `Thinking with ${structuredStatus.model || this.activeModelName}...`,
+                currentStep: structuredStatus.step,
+                totalSteps: structuredStatus.max_steps,
+                progressPercent: structuredStatus.max_steps && structuredStatus.step ? Math.round((structuredStatus.step / structuredStatus.max_steps) * 100) : undefined,
+                elapsedSeconds: this.responseTimer,
+                canCancel: true
+              };
+              this.requestUpdate();
+            } else if (structuredStatus.status === 'needs_user') {
+              this.needsUserConfirmation = true;
+              this.taskProgress = {
+                taskName: 'Confirmation Required',
+                stepDescription: structuredStatus.error || 'Agent awaits user authorization...',
+                elapsedSeconds: this.responseTimer,
+                canCancel: true
+              };
+              this.requestUpdate();
+            } else if (structuredStatus.status === 'running') {
               this.taskProgress = {
                 taskName: structuredStatus.tool_name ? `Tool: ${structuredStatus.tool_name}` : 'Executing Agent Workflow',
                 stepDescription: structuredStatus.next_action || 'Processing...',
@@ -6216,16 +6470,82 @@ export class GdmLiveAudio extends LitElement {
                 canCancel: true
               };
               this.requestUpdate();
-            } else if (structuredStatus.status === 'completed' || structuredStatus.status === 'failed') {
+            } else if (structuredStatus.status === 'completed') {
+              this.activeToolName = null;
+              this.activeToolStatus = null;
+              this.needsUserConfirmation = false;
               this.taskProgress = null;
               this.requestUpdate();
+            } else if (structuredStatus.status === 'failed') {
+              this.activeToolName = null;
+              this.activeToolStatus = 'failed';
+              if (structuredStatus.error) {
+                this.agentErrorMessage = structuredStatus.error;
+              }
+              this.requestUpdate();
             }
+          }
+
+          // Parse tool start signal (>>> [TOOL START]: tool_name)
+          const toolStartMatch = cleanData.match(/>>> \[TOOL START\]:\s*([a-zA-Z0-9_\-.:]+)/i);
+          if (toolStartMatch && toolStartMatch[1]) {
+            const tName = toolStartMatch[1].trim();
+            this.activeToolName = tName;
+            this.activeToolStatus = 'running';
+            this.taskProgress = {
+              taskName: `Tool: ${tName}`,
+              stepDescription: `Agent executing ${tName} in workspace...`,
+              elapsedSeconds: this.responseTimer,
+              canCancel: true
+            };
+            this.requestUpdate();
+          }
+
+          // Parse tool end signal (>>> [TOOL END]: tool_name (Status: SUCCEEDED|FAILED|BLOCKED))
+          const toolEndMatch = cleanData.match(/>>> \[TOOL END\]:\s*([a-zA-Z0-9_\-.:]+)\s*\((?:Status:\s*)?([^\)]+)\)/i);
+          if (toolEndMatch && toolEndMatch[1]) {
+            const tName = toolEndMatch[1].trim();
+            const statusStr = toolEndMatch[2].trim().toLowerCase();
+            const isSuccess = statusStr === 'succeeded' || statusStr === 'success';
+            this.activeToolStatus = isSuccess ? 'success' : 'failed';
+            skillsManager.recordSkillRun(
+              tName,
+              tName,
+              isSuccess ? '🔧' : '⚠️',
+              isSuccess,
+              isSuccess ? 'Tool executed successfully' : `Tool execution returned status: ${statusStr}`
+            );
+            this.taskProgress = {
+              taskName: `Tool: ${tName}`,
+              stepDescription: isSuccess ? `✓ Tool '${tName}' succeeded` : `✗ Tool '${tName}' ended (${statusStr})`,
+              elapsedSeconds: this.responseTimer,
+              canCancel: true
+            };
+            setTimeout(() => {
+              if (this.activeToolStatus !== 'running') {
+                this.activeToolName = null;
+                this.requestUpdate();
+              }
+            }, 2500);
+            this.requestUpdate();
+          }
+
+          // Parse tool error signal (>>> [TOOL ERROR]: tool_name - error_msg)
+          const toolErrorMatch = cleanData.match(/>>> \[TOOL ERROR\]:\s*(?:([a-zA-Z0-9_\-.:]+)\s*-\s*)?([^\r\n]+)/i);
+          if (toolErrorMatch && toolErrorMatch[2]) {
+            const errTool = toolErrorMatch[1] || this.activeToolName || 'tool';
+            const errMsg = toolErrorMatch[2].trim();
+            this.activeToolStatus = 'failed';
+            this.agentErrorMessage = `${errTool}: ${errMsg}`;
+            this.requestUpdate();
           }
 
           // Parse dynamic tool execution logs
           const toolExecMatch = cleanData.match(/(?:Executing tool|Running tool|Invoking tool|Calling tool|Executing):\s*([a-zA-Z0-9_\-.:]+)/i);
           if (toolExecMatch && toolExecMatch[1]) {
             const toolName = toolExecMatch[1].trim();
+            this.activeToolName = toolName;
+            this.activeToolStatus = 'running';
             this.taskProgress = {
               taskName: `Tool: ${toolName}`,
               stepDescription: `Agent executing ${toolName} in workspace environment...`,
@@ -6272,6 +6592,14 @@ export class GdmLiveAudio extends LitElement {
             this.requestUpdate();
           } else if (cleanData.includes('MCP SERVICE LAYER: DISABLED') || cleanData.includes('Model Context Protocol Server DISABLED') || cleanData.includes('MCP Server layer has been DISABLED')) {
             this.isMcpEnabled = false;
+            this.requestUpdate();
+          }
+
+          // Parse LLM router model selection with reason
+          const llmRouterMatch = cleanData.match(/>>> \[LLM ROUTER\]:\s*Selected model '([^']+)'\s*\(([^)]+)\)/i);
+          if (llmRouterMatch && llmRouterMatch[1]) {
+            this.activeModelName = llmRouterMatch[1];
+            this.activeModelReason = llmRouterMatch[2] ? llmRouterMatch[2].trim() : '';
             this.requestUpdate();
           }
 
@@ -6364,13 +6692,12 @@ export class GdmLiveAudio extends LitElement {
       this.isStartingAgent = false;
       this.isStoppingAgent = false;
       this.requestUpdate();
-      if (this.isTerminalEnabled) {
-        console.log('Reconnecting in 3s...');
+      if (!this.isServerTerminated) {
         setTimeout(() => {
-          if (!this.wsTerminal && this.isTerminalEnabled) {
+          if (!this.wsTerminal && !this.isServerTerminated) {
             this.initTerminalWebSocket();
           }
-        }, 3000);
+        }, 2500);
       }
     };
 
@@ -6626,6 +6953,10 @@ export class GdmLiveAudio extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    if (this.clientPulseInterval) {
+      clearInterval(this.clientPulseInterval);
+      this.clientPulseInterval = null;
+    }
     window.removeEventListener('keydown', this.handleGlobalKeyDown);
     document.removeEventListener('fullscreenchange', this.handleFullscreenChange);
     document.removeEventListener('mousemove', this.resetIdleTimer);
@@ -6643,6 +6974,12 @@ export class GdmLiveAudio extends LitElement {
         navigator.mediaDevices.removeEventListener('devicechange', this.handleDeviceChange);
       } catch (e) {}
     }
+    try {
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('/api/client/disconnect');
+        navigator.sendBeacon('/api/shutdown');
+      }
+    } catch (e) {}
     this.cleanupAllResources();
   }
 
@@ -9883,15 +10220,22 @@ Available Effects:
   }
 
   private async forceStopServer() {
-    if (confirm("Are you sure you want to stop the server and terminate all agent processes?")) {
+    if (confirm("Are you sure you want to stop the server and terminate all agent processes?\n\nThis will completely kill the Python agent process tree and release port 3000.")) {
+      this.isServerTerminated = true;
+      if (this.clientPulseInterval) {
+        clearInterval(this.clientPulseInterval);
+        this.clientPulseInterval = null;
+      }
       try {
-        await fetch('/api/shutdown?force=true', { method: 'POST' });
+        await fetch('/api/shutdown?force=true', { method: 'POST', keepalive: true });
       } catch (e) {}
       if (this.wsTerminal) {
         try { this.wsTerminal.close(); } catch (e) {}
       }
+      this.isSettingsOpen = false;
+      this.isRuntimeDrawerOpen = false;
       this.updateStatus('Server Terminated');
-      alert("Server and agent process tree killed. Port released.");
+      this.requestUpdate();
     }
   }
 
@@ -10520,10 +10864,122 @@ Available Effects:
     this.requestUpdate();
   }
 
+  private resetAgentPipSize() {
+    this.agentPipWidth = 270;
+    this.agentPipHeight = 180;
+    localStorage.removeItem('project_lumin_agent_pip_width');
+    localStorage.removeItem('project_lumin_agent_pip_height');
+    soundFX.playClick();
+    this.triggerWindowResize();
+    this.requestUpdate();
+  }
+
+  private handleAgentPipResizePointerDown = (
+    e: PointerEvent | MouseEvent,
+    dir: 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'w' | 'e' = 'se'
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const stageElem = this.shadowRoot?.getElementById('lumin-visualizer-stage') as HTMLElement | null;
+    if (!stageElem) return;
+
+    this.isDraggingAgentPipResizer = true;
+    const startWidth = this.agentPipWidth;
+    const startHeight = this.agentPipHeight;
+    const startPointerX = e.clientX;
+    const startPointerY = e.clientY;
+
+    const mainElem = this.shadowRoot?.querySelector('.lumin-main-content') as HTMLElement | null;
+    const mainRect = mainElem ? mainElem.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+    const stageRect = stageElem.getBoundingClientRect();
+
+    // Compute element's current top/left relative to .lumin-main-content
+    const startElemX = stageRect.left - mainRect.left;
+    const startElemY = stageRect.top - mainRect.top;
+
+    let resizeRaf: number | null = null;
+    const onPointerMove = (moveEvent: PointerEvent | MouseEvent) => {
+      if (!this.isDraggingAgentPipResizer) return;
+      const deltaX = moveEvent.clientX - startPointerX;
+      const deltaY = moveEvent.clientY - startPointerY;
+
+      const minW = 180;
+      const minH = 120;
+      const maxW = Math.max(minW, mainRect.width - 32);
+      const maxH = Math.max(minH, mainRect.height - 80);
+
+      let proposedWidth = startWidth;
+      let proposedHeight = startHeight;
+      let proposedPosX = startElemX;
+      let proposedPosY = startElemY;
+
+      // Horizontal axis resizing
+      if (dir === 'se' || dir === 'ne' || dir === 'e') {
+        proposedWidth = Math.round(Math.max(minW, Math.min(maxW, startWidth + deltaX)));
+        proposedPosX = startElemX;
+      } else if (dir === 'sw' || dir === 'nw' || dir === 'w') {
+        proposedWidth = Math.round(Math.max(minW, Math.min(maxW, startWidth - deltaX)));
+        proposedPosX = startElemX + (startWidth - proposedWidth);
+      }
+
+      // Vertical axis resizing
+      if (dir === 'se' || dir === 'sw' || dir === 's') {
+        proposedHeight = Math.round(Math.max(minH, Math.min(maxH, startHeight + deltaY)));
+        proposedPosY = startElemY;
+      } else if (dir === 'ne' || dir === 'nw' || dir === 'n') {
+        proposedHeight = Math.round(Math.max(minH, Math.min(maxH, startHeight - deltaY)));
+        proposedPosY = startElemY + (startHeight - proposedHeight);
+      }
+
+      // Keep position bounded within parent container
+      const boundedPosX = Math.max(8, Math.min(mainRect.width - proposedWidth - 8, proposedPosX));
+      const boundedPosY = Math.max(8, Math.min(mainRect.height - proposedHeight - 8, proposedPosY));
+
+      if (!resizeRaf) {
+        resizeRaf = requestAnimationFrame(() => {
+          resizeRaf = null;
+          this.agentPipWidth = proposedWidth;
+          this.agentPipHeight = proposedHeight;
+          this.agentPipPos = { x: boundedPosX, y: boundedPosY };
+          this.requestUpdate();
+        });
+      }
+    };
+
+    const onPointerUp = () => {
+      if (resizeRaf) {
+        cancelAnimationFrame(resizeRaf);
+        resizeRaf = null;
+      }
+      if (this.isDraggingAgentPipResizer) {
+        this.isDraggingAgentPipResizer = false;
+        localStorage.setItem('project_lumin_agent_pip_width', String(this.agentPipWidth));
+        localStorage.setItem('project_lumin_agent_pip_height', String(this.agentPipHeight));
+        if (this.agentPipPos) {
+          localStorage.setItem('project_lumin_agent_pip_pos', JSON.stringify(this.agentPipPos));
+        }
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        window.removeEventListener('pointercancel', onPointerUp);
+        window.removeEventListener('mousemove', onPointerMove);
+        window.removeEventListener('mouseup', onPointerUp);
+        this.triggerWindowResize();
+        this.requestUpdate();
+      }
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', onPointerUp);
+  };
+
   private handleAgentPipPointerDown = (e: PointerEvent | MouseEvent) => {
-    // Prevent drag if clicking buttons, inputs, links or actions container
+    // Prevent drag if clicking buttons, inputs, links or actions container or resize handles/edges
     const target = (e.composedPath ? e.composedPath()[0] : e.target) as HTMLElement;
-    if (target && (target.closest('button') || target.closest('.pip-actions') || target.closest('a') || target.closest('input'))) {
+    if (target && (target.closest('button') || target.closest('.pip-actions') || target.closest('.pip-resize-handle') || target.closest('.pip-resize-edge') || target.closest('a') || target.closest('input'))) {
       return;
     }
 
@@ -10556,8 +11012,8 @@ Available Effects:
       const currentMainElem = this.shadowRoot?.querySelector('.lumin-main-content') as HTMLElement | null;
       const currentMainRect = currentMainElem ? currentMainElem.getBoundingClientRect() : mainRect;
 
-      const elemWidth = stageElem.offsetWidth || (this.agentVisMode === 'minimal' ? 172 : 270);
-      const elemHeight = stageElem.offsetHeight || (this.agentVisMode === 'minimal' ? 34 : 180);
+      const elemWidth = stageElem.offsetWidth || (this.agentVisMode === 'minimal' ? 172 : this.agentPipWidth);
+      const elemHeight = stageElem.offsetHeight || (this.agentVisMode === 'minimal' ? 34 : this.agentPipHeight);
 
       let minX = 12;
       let maxX = Math.max(minX, currentMainRect.width - elemWidth - 12);
@@ -10668,6 +11124,7 @@ Available Effects:
             <lumin-model-selector
               id="lumin-nav-model-selector"
               .activeModel=${this.activeModelName}
+              .activeModelReason=${this.activeModelReason}
               @model-selected=${(e: CustomEvent) => {
                 const isAuto = e.detail.isAuto || e.detail.model === 'auto' || e.detail.model === 'Auto-Router' || e.detail.model === 'router';
                 this.activeModelName = isAuto ? 'Auto-Router' : e.detail.model;
@@ -10842,6 +11299,21 @@ Available Effects:
             <span class="brand-title-compact">LUMIN</span>
           </div>
 
+          ${this.unrestrictedMode ? html`
+            <button 
+              class="unrestricted-badge-pill" 
+              @click=${() => this.switchTab('settings')}
+              title="UNRESTRICTED SYSTEM ACCESS ACTIVE - Sandbox limits disabled. Click to review in Settings."
+              style="display: inline-flex; align-items: center; gap: 5px; background: rgba(234, 179, 8, 0.15); border: 1px solid rgba(234, 179, 8, 0.45); color: #facc15; font-size: 0.68rem; font-weight: 700; padding: 2px 8px; border-radius: 9999px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; transition: all 0.2s;"
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+              </svg>
+              <span>UNRESTRICTED</span>
+            </button>
+          ` : ''}
+
           <button 
             id="nav-runtime-pill-btn"
             class="nav-runtime-pill ${this.isRuntimeDrawerOpen ? 'active' : ''}"
@@ -10984,22 +11456,25 @@ Available Effects:
       : `visualizer-stage mode-${this.currentTab}`;
     let stageStyle = '';
     if (!this.isVisualizerOnlyMode && this.currentTab === 'agent') {
-      stageClass += ` vis-${this.agentVisMode} ${this.isDraggingAgentPip ? 'is-dragging' : ''}`;
+      stageClass += ` vis-${this.agentVisMode} ${this.isDraggingAgentPip || this.isDraggingAgentPipResizer ? 'is-dragging' : ''}`;
+      if (this.agentVisMode === 'compact') {
+        stageStyle += `width: ${this.agentPipWidth}px; height: ${this.agentPipHeight}px; `;
+      }
       if (this.agentPipPos) {
-        stageStyle = `left: ${this.agentPipPos.x}px; top: ${this.agentPipPos.y}px; right: auto; bottom: auto; margin: 0;`;
+        stageStyle += `left: ${this.agentPipPos.x}px; top: ${this.agentPipPos.y}px; right: auto; bottom: auto; margin: 0;`;
       } else {
         stageClass += ` corner-${this.agentPipCorner}`;
         if (this.agentPipCorner === 'top-right') {
           if (this.isTerminalOpen && this.terminalPosition === 'right') {
-            stageStyle = `right: calc(${this.terminalWidth}px + 16px); top: 48px; left: auto;`;
+            stageStyle += `right: calc(${this.terminalWidth}px + 16px); top: 48px; left: auto;`;
           } else {
-            stageStyle = 'right: 16px; top: 48px; left: auto;';
+            stageStyle += 'right: 16px; top: 48px; left: auto;';
           }
         } else {
           if (this.isTerminalOpen && this.terminalPosition === 'left') {
-            stageStyle = `left: calc(${this.terminalWidth}px + 16px); top: 48px; right: auto;`;
+            stageStyle += `left: calc(${this.terminalWidth}px + 16px); top: 48px; right: auto;`;
           } else {
-            stageStyle = 'left: 16px; top: 48px; right: auto;';
+            stageStyle += 'left: 16px; top: 48px; right: auto;';
           }
         }
       }
@@ -11098,6 +11573,20 @@ Available Effects:
                 <span>3D · LIVE</span>
               </div>
               <div class="pip-actions" @pointerdown=${(e: Event) => e.stopPropagation()}>
+                ${(this.agentPipWidth !== 270 || this.agentPipHeight !== 180) ? html`
+                  <button 
+                    class="pip-btn" 
+                    @click=${() => this.resetAgentPipSize()} 
+                    title="Reset PIP Size (270×180)"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                      <path d="M21 3v5h-5"/>
+                      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                      <path d="M3 21v-5h5"/>
+                    </svg>
+                  </button>
+                ` : ''}
                 ${this.agentPipPos ? html`
                   <button 
                     class="pip-btn" 
@@ -11154,6 +11643,7 @@ Available Effects:
           <gdm-live-audio-visuals-3d
             .isActive=${isVisualizerActive}
             .isSpeaking=${(this.ttsPlaybackState === 'playing' && (!!this.currentTTSSource || this.sources.size > 0)) || (window.speechSynthesis && window.speechSynthesis.speaking)}
+            .isResizing=${this.isDraggingAgentPipResizer || this.isDraggingTerminalSideResizer || this.isDraggingTerminalPaneResizer}
             .inputNode=${this.inputNode}
             .outputNode=${this.outputNode}
             .particleSize=${this.particleSize}
@@ -11263,6 +11753,76 @@ Available Effects:
             @silence-timeout=${this.stopEverythingAndGoToIdle}
           ></gdm-live-audio-visuals-3d>
         `}
+
+        ${(!this.isVisualizerOnlyMode && this.currentTab === 'agent' && this.agentVisMode === 'compact') ? html`
+          <!-- Multi-Directional Corner Resize Handles -->
+          <div 
+            class="pip-resize-handle handle-se ${this.isDraggingAgentPipResizer ? 'active' : ''}" 
+            @pointerdown=${(e: PointerEvent) => this.handleAgentPipResizePointerDown(e, 'se')}
+            title="Drag bottom-right corner to resize (Double-click to reset)"
+            @dblclick=${() => this.resetAgentPipSize()}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <path d="M21 15v6h-6M21 9v2M15 21h-2M21 21l-9-9" />
+            </svg>
+          </div>
+          <div 
+            class="pip-resize-handle handle-sw ${this.isDraggingAgentPipResizer ? 'active' : ''}" 
+            @pointerdown=${(e: PointerEvent) => this.handleAgentPipResizePointerDown(e, 'sw')}
+            title="Drag bottom-left corner to resize (Double-click to reset)"
+            @dblclick=${() => this.resetAgentPipSize()}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <path d="M3 15v6h6M3 9v2M9 21h2M3 21l9-9" />
+            </svg>
+          </div>
+          <div 
+            class="pip-resize-handle handle-ne ${this.isDraggingAgentPipResizer ? 'active' : ''}" 
+            @pointerdown=${(e: PointerEvent) => this.handleAgentPipResizePointerDown(e, 'ne')}
+            title="Drag top-right corner to resize (Double-click to reset)"
+            @dblclick=${() => this.resetAgentPipSize()}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <path d="M21 9V3h-6M21 15v-2M15 3h-2M21 3l-9 9" />
+            </svg>
+          </div>
+          <div 
+            class="pip-resize-handle handle-nw ${this.isDraggingAgentPipResizer ? 'active' : ''}" 
+            @pointerdown=${(e: PointerEvent) => this.handleAgentPipResizePointerDown(e, 'nw')}
+            title="Drag top-left corner to resize (Double-click to reset)"
+            @dblclick=${() => this.resetAgentPipSize()}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <path d="M3 9V3h6M3 15v-2M9 3h2M3 3l9 9" />
+            </svg>
+          </div>
+
+          <!-- Edge Resize Hit Areas (Top, Bottom, Left, Right) -->
+          <div 
+            class="pip-resize-edge edge-n ${this.isDraggingAgentPipResizer ? 'active' : ''}" 
+            @pointerdown=${(e: PointerEvent) => this.handleAgentPipResizePointerDown(e, 'n')}
+            title="Drag top edge to resize"
+          ></div>
+          <div 
+            class="pip-resize-edge edge-s ${this.isDraggingAgentPipResizer ? 'active' : ''}" 
+            @pointerdown=${(e: PointerEvent) => this.handleAgentPipResizePointerDown(e, 's')}
+            title="Drag bottom edge to resize"
+          ></div>
+          <div 
+            class="pip-resize-edge edge-w ${this.isDraggingAgentPipResizer ? 'active' : ''}" 
+            @pointerdown=${(e: PointerEvent) => this.handleAgentPipResizePointerDown(e, 'w')}
+            title="Drag left edge to resize"
+          ></div>
+          <div 
+            class="pip-resize-edge edge-e ${this.isDraggingAgentPipResizer ? 'active' : ''}" 
+            @pointerdown=${(e: PointerEvent) => this.handleAgentPipResizePointerDown(e, 'e')}
+            title="Drag right edge to resize"
+          ></div>
+
+          <div class="pip-size-badge">
+            ${Math.round(this.agentPipWidth)} × ${Math.round(this.agentPipHeight)}
+          </div>
+        ` : ''}
       </div>
     `;
   }
@@ -11559,6 +12119,7 @@ Available Effects:
           <lumin-status-bar
             .currentMode=${this.currentTab}
             .activeModelName=${this.activeModelName}
+            .activeModelReason=${this.activeModelReason}
             .activePlatform=${this.activePlatform}
             .agentState=${this.getSystemAgentState()}
             .isAgentRunning=${this.isAgentRunning}
@@ -11573,12 +12134,29 @@ Available Effects:
             .piperVoice=${this.piperVoice}
             .elapsedSeconds=${this.responseTimer}
             .taskProgress=${this.taskProgress}
-            .showTaskProgress=${this.isGeneratingResponse || this.isStartingAgent || !!this.taskProgress}
+            .showTaskProgress=${this.isGeneratingResponse || this.isStartingAgent || !!this.taskProgress || !!this.activeToolName}
             .isTerminalOpen=${this.isTerminalOpen}
             .unrestrictedMode=${this.unrestrictedMode}
             .activeSkill=${this.activeSkill}
             .activeSkillsCount=${skillsManager.getActiveSkills().length}
             .lastRunSkill=${skillsManager.getLastRunSkill()}
+            .activeToolName=${this.activeToolName}
+            .activeToolStatus=${this.activeToolStatus}
+            .agentErrorMessage=${this.agentErrorMessage}
+            .needsUserConfirmation=${this.needsUserConfirmation}
+            @clear-error=${() => {
+              this.agentErrorMessage = null;
+              this.requestUpdate();
+            }}
+            @model-click=${() => {
+              const selector = this.shadowRoot?.querySelector('#lumin-nav-model-selector') as any;
+              if (selector && typeof selector.openModal === 'function') {
+                selector.openModal();
+              } else {
+                this.switchTab('settings');
+                this.activeSettingsTab = 'MODELS';
+              }
+            }}
             @toggle-terminal=${() => this.toggleTerminal()}
             @toggle-mode-menu=${() => {
               const modes: Array<'voice' | 'agent' | 'settings'> = ['voice', 'agent', 'settings'];
@@ -11670,6 +12248,31 @@ Available Effects:
                   ? 'UNRESTRICTED MODE UNLOCKED · FULL SYSTEM ACCESS' 
                   : 'SANDBOX RESTORED · STANDARD MODE ACTIVE'}
               </span>
+            </div>
+          </div>
+        ` : ''}
+
+        ${this.isServerTerminated ? html`
+          <div style="position: fixed; inset: 0; z-index: 99999; background: rgba(5, 7, 12, 0.94); backdrop-filter: blur(16px); display: flex; align-items: center; justify-content: center; padding: 20px; animation: surfaceFadeIn 0.2s ease;">
+            <div style="max-width: 480px; width: 100%; background: #0f141f; border: 1px solid rgba(255, 85, 85, 0.35); border-radius: 12px; padding: 28px 24px; text-align: center; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(255, 85, 85, 0.15);">
+              <div style="font-size: 2.2rem; margin-bottom: 12px;">🛑</div>
+              <h2 style="font-size: 1.15rem; font-weight: 700; color: #ff6b6b; margin: 0 0 8px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px;">SERVER TERMINATED</h2>
+              <p style="font-size: 0.85rem; color: #94a3b8; line-height: 1.6; margin: 0 0 20px;">
+                All Python agent processes and the Node.js server have been terminated. Port 3000 is released and all system resources have been cleared.
+              </p>
+              <div style="background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #38bdf8; margin-bottom: 20px; text-align: left;">
+                <span style="color: #64748b;"># To restart LUMIN:</span><br/>
+                &gt; start_app.bat
+              </div>
+              <button 
+                type="button" 
+                @click=${() => window.close()} 
+                style="background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15); color: #f1f5f9; padding: 8px 20px; border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease;"
+                onmouseover="this.style.background='rgba(255,255,255,0.15)'"
+                onmouseout="this.style.background='rgba(255,255,255,0.08)'"
+              >
+                Close Window
+              </button>
             </div>
           </div>
         ` : ''}

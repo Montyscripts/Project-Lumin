@@ -24,8 +24,9 @@ import subprocess
 import tempfile
 import uuid
 from typing import Dict, Any, List, Optional, Tuple
+from core.diagnostics import get_logger
 
-logger = logging.getLogger("LUMIN.WritingAutomation")
+logger = get_logger("writing_automation")
 
 
 class WritingAutomationEngine:

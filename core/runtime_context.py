@@ -12,10 +12,10 @@ import re
 import json
 import platform
 import datetime
-import logging
 from typing import Dict, Any, Tuple, Optional, List
+from core.diagnostics import get_logger
 
-logger = logging.getLogger("lumin.runtime_context")
+logger = get_logger("runtime_context")
 
 DEFAULT_USER_CONTEXT = """# USER.md — User Profile & Preferences
 ## Identity

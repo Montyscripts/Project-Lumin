@@ -179,6 +179,7 @@ export const DEFAULT_MODELS_CATALOG: OllamaModelInfo[] = [
 @customElement('lumin-model-selector')
 export class LuminModelSelector extends LitElement {
   @property({ type: String }) activeModel = 'auto';
+  @property({ type: String }) activeModelReason = '';
   @property({ type: Boolean }) isAutoRouting = true;
   @property({ type: Boolean }) isOpen = false;
   @property({ type: Boolean }) isModalOpen = false;
@@ -1002,6 +1003,9 @@ export class LuminModelSelector extends LitElement {
           this.activeModel = isAutoBackend ? 'auto' : data.activeModel;
           this.isAutoRouting = isAutoBackend;
         }
+        if (data.activeModelReason) {
+          this.activeModelReason = data.activeModelReason;
+        }
       }
     } catch (err) {
       console.info('Operating with local model catalog & neural router.');
@@ -1256,7 +1260,7 @@ export class LuminModelSelector extends LitElement {
           class="model-dropdown-trigger ${isCurrentAuto ? 'is-auto' : ''} ${this.isOpen ? 'is-open' : ''}" 
           @click=${this.toggleDropdown}
           id="lumin-model-selector-trigger"
-          title="Active Model Routing: ${displayName} • Click to select model"
+          title="Active Model: ${displayName}${this.activeModelReason ? ` (${this.activeModelReason})` : ''} • Click to select model"
           aria-haspopup="listbox"
           aria-expanded="${this.isOpen}"
         >
@@ -1289,6 +1293,14 @@ export class LuminModelSelector extends LitElement {
         ${this.isOpen ? html`
           <div class="model-dropdown-panel" id="model-dropdown-options-panel" role="listbox">
             
+            ${this.activeModelReason ? html`
+              <div style="padding: 6px 12px; background: rgba(56, 189, 248, 0.08); border-bottom: 1px solid rgba(56, 189, 248, 0.2); font-size: 0.72rem; color: #bae6fd; display: flex; align-items: center; gap: 6px;" title="${this.activeModelReason}">
+                <span style="color: #38bdf8;">🎯</span>
+                <span style="font-weight: 600; white-space: nowrap;">Routing:</span>
+                <span style="color: #ffffff; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this.activeModelReason}</span>
+              </div>
+            ` : ''}
+
             <!-- Search & Quick Category Filters Header -->
             <div class="dropdown-header-toolbar" @click=${(e: Event) => e.stopPropagation()}>
               <div class="search-input-box">

@@ -7,12 +7,11 @@ Completely eliminates paragraph templates, fixed slot formulas, and structural r
 """
 
 import re
-import logging
-import urllib.request
 from typing import Dict, Any, List, Optional, Set, Tuple
 from tools.registry import _tool_result_to_display
+from core.diagnostics import get_logger
 
-logger = logging.getLogger("LUMIN.Writing")
+logger = get_logger("writing")
 
 MAX_WORD_LIMIT = 15000  # Safe cap limit for a single generation run
 WORDS_PER_PARAGRAPH = 150

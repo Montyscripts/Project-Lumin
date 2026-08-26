@@ -18,8 +18,9 @@ import socket
 import urllib.request
 import re
 from typing import Optional, Dict, Any, List
+from core.diagnostics import get_logger
 
-logger = logging.getLogger("LUMIN.Audio.TTS")
+logger = get_logger("audio.tts")
 
 def sanitize_text_for_tts(text: str) -> str:
     """
