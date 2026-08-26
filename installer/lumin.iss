@@ -88,6 +88,6 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDi
 
 [Run]
 ; Run automated post-installation environment setup silently
-Filename: "{app}\installer\post_install.bat"; Description: "Configure Python environment and dependencies"; StatusMsg: "Configuring LUMIN local environment and models..."; Flags: runhidden
+Filename: "{app}\installer\post_install.bat"; StatusMsg: "Configuring LUMIN environment (Python venv + frontend packages)..."; Flags: runhidden waituntilterminated
 ; Offer to launch LUMIN upon completion
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

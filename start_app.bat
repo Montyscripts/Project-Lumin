@@ -1,39 +1,6 @@
 ::[Bat To Exe Converter]
 ::
 ::YAwzoRdxOk+EWAjk
-::fBw5plQjdCyDJGyX8VAjFDZbQhCbAE+/Fb4I5/jH3/iIqEgeQK8TbYLS1IiHLvMH60nocIQR33lVloUFDxQ4
-::YAwzuBVtJxjWCl3EqQJgSA==
-::ZR4luwNxJguZRRnk
-::Yhs/ulQjdF+5
-::cxAkpRVqdFKZSzk=
-::cBs/ulQjdF+5
-::ZR41oxFsdFKZSDk=
-::eBoioBt6dFKZSDk=
-::cRo6pxp7LAbNWATEpCI=
-::egkzugNsPRvcWATEpCI=
-::dAsiuh18IRvcCxnZtBJQ
-::cRYluBh/LU+EWAnk
-::YxY4rhs+aU+JeA==
-::cxY6rQJ7JhzQF1fEqQJQ
-::ZQ05rAF9IBncCkqN+0xwdVs0
-::ZQ05rAF9IAHYFVzEqQJQ
-::eg0/rx1wNQPfEVWB+kM9LVsJDGQ=
-::fBEirQZwNQPfEVWB+kM9LVsJDGQ=
-::cRolqwZ3JBvQF1fEqQJQ
-::dhA7uBVwLU+EWDk=
-::YQ03rBFzNR3SWATElA==
-::dhAmsQZ3MwfNWATElA==
-::ZQ0/vhVqMQ3MEVWAtB9wSA==
-::Zg8zqx1/OA3MEVWAtB9wSA==
-::dhA7pRFwIByZRRnk
-::Zh4grVQjdCyDJGyX8VAjFDZbQhCbAE+/Fb4I5/jH3/iIqEgeQK8TbYLS1IiiNe0a5AvhbZNN
-::YB416Ek+ZG8=
-::
-::
-::978f952a14a936cc963da21a135fa983
-::[Bat To Exe Converter]
-::
-::YAwzoRdxOk+EWAjk
 ::fBw5plQjdCyDJGyX8VAjFDZbQhCbAE+/Fb4I5/jH3/iIqEgeQK8TbYLS1PmYca5DpBXYRYQi3H9ZjIYgGRZRcC67ew04oG1+sGWTPsSTvUHoSUfp
 ::YAwzuBVtJxjWCl3EqQJgSA==
 ::ZR4luwNxJguZRRnk
@@ -78,17 +45,23 @@ if not exist "%PROJ_DIR%\lumin_context" mkdir "%PROJ_DIR%\lumin_context" >nul 2>
 if not exist "%PROJ_DIR%\tts_cache" mkdir "%PROJ_DIR%\tts_cache" >nul 2>&1
 if not exist "%PROJ_DIR%\uploads" mkdir "%PROJ_DIR%\uploads" >nul 2>&1
 if not exist "%PROJ_DIR%\memory" mkdir "%PROJ_DIR%\memory" >nul 2>&1
+if not exist "%PROJ_DIR%\bin\ffmpeg" mkdir "%PROJ_DIR%\bin\ffmpeg" >nul 2>&1
 if not exist "%PROJ_DIR%\agent_config.json" (
     if exist "%PROJ_DIR%\agent_config.example.json" (
         copy "%PROJ_DIR%\agent_config.example.json" "%PROJ_DIR%\agent_config.json" >nul 2>&1
     )
 )
 
-REM 2. Find Node.js (system first, then local paths)
+REM Prepend project-local nodejs and ffmpeg to PATH if present
+if exist "%PROJ_DIR%\nodejs" set "PATH=%PROJ_DIR%\nodejs;%PATH%"
+if exist "%PROJ_DIR%\bin\ffmpeg" set "PATH=%PROJ_DIR%\bin\ffmpeg;%PATH%"
+
+REM 2. Find Node.js (project-local portable first, then system paths)
 set "NODE_EXE="
-if exist "%ProgramFiles%\nodejs\node.exe" set "NODE_EXE=%ProgramFiles%\nodejs\node.exe"
+if exist "%PROJ_DIR%\nodejs\node.exe" set "NODE_EXE=%PROJ_DIR%\nodejs\node.exe"
+if not defined NODE_EXE if exist "%ProgramFiles%\nodejs\node.exe" set "NODE_EXE=%ProgramFiles%\nodejs\node.exe"
 if not defined NODE_EXE if exist "%LocalAppData%\Programs\nodejs\node.exe" set "NODE_EXE=%LocalAppData%\Programs\nodejs\node.exe"
-if not defined NODE_EXE if exist "%PROJ_DIR%\nodejs\node.exe" set "NODE_EXE=%PROJ_DIR%\nodejs\node.exe"
+if not defined NODE_EXE if exist "%USERPROFILE%\AppData\Local\Programs\nodejs\node.exe" set "NODE_EXE=%USERPROFILE%\AppData\Local\Programs\nodejs\node.exe"
 if not defined NODE_EXE (
     where node >nul 2>&1
     if not errorlevel 1 set "NODE_EXE=node"
@@ -138,7 +111,9 @@ if not exist "%VENV_PY%" (
 REM 4. Check frontend dependencies and build production bundle
 if not exist "%PROJ_DIR%\node_modules" (
     echo Installing web interface packages...
-    if exist "%ProgramFiles%\nodejs\npm.cmd" (
+    if exist "%PROJ_DIR%\nodejs\npm.cmd" (
+        call "%PROJ_DIR%\nodejs\npm.cmd" install >nul 2>&1
+    ) else if exist "%ProgramFiles%\nodejs\npm.cmd" (
         call "%ProgramFiles%\nodejs\npm.cmd" install >nul 2>&1
     ) else if exist "%LocalAppData%\Programs\nodejs\npm.cmd" (
         call "%LocalAppData%\Programs\nodejs\npm.cmd" install >nul 2>&1
@@ -148,7 +123,9 @@ if not exist "%PROJ_DIR%\node_modules" (
 )
 if not exist "%PROJ_DIR%\dist\index.html" (
     echo Compiling high-speed production frontend bundle...
-    if exist "%ProgramFiles%\nodejs\npm.cmd" (
+    if exist "%PROJ_DIR%\nodejs\npm.cmd" (
+        call "%PROJ_DIR%\nodejs\npm.cmd" run build >nul 2>&1
+    ) else if exist "%ProgramFiles%\nodejs\npm.cmd" (
         call "%ProgramFiles%\nodejs\npm.cmd" run build >nul 2>&1
     ) else if exist "%LocalAppData%\Programs\nodejs\npm.cmd" (
         call "%LocalAppData%\Programs\nodejs\npm.cmd" run build >nul 2>&1

@@ -22,11 +22,15 @@ if not exist "%CD%\lumin_context" mkdir "%CD%\lumin_context" >nul 2>&1
 if not exist "%CD%\tts_cache" mkdir "%CD%\tts_cache" >nul 2>&1
 if not exist "%CD%\uploads" mkdir "%CD%\uploads" >nul 2>&1
 if not exist "%CD%\memory" mkdir "%CD%\memory" >nul 2>&1
+if not exist "%CD%\bin\ffmpeg" mkdir "%CD%\bin\ffmpeg" >nul 2>&1
 if not exist "%CD%\agent_config.json" (
     if exist "%CD%\agent_config.example.json" (
         copy "%CD%\agent_config.example.json" "%CD%\agent_config.json" >nul 2>&1
     )
 )
+
+if exist "%CD%\nodejs" set "PATH=%CD%\nodejs;%PATH%"
+if exist "%CD%\bin\ffmpeg" set "PATH=%CD%\bin\ffmpeg;%PATH%"
 
 :: ── 1. Virtual Environment / Python Detection ────────────────────
 echo   [1/4] Checking Python environment (Python 3.11, 3.12, 3.13)...

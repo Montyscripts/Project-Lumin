@@ -13,23 +13,36 @@ if not exist "%PROJ_DIR%\lumin_context" mkdir "%PROJ_DIR%\lumin_context" >nul 2>
 if not exist "%PROJ_DIR%\tts_cache" mkdir "%PROJ_DIR%\tts_cache" >nul 2>&1
 if not exist "%PROJ_DIR%\uploads" mkdir "%PROJ_DIR%\uploads" >nul 2>&1
 if not exist "%PROJ_DIR%\memory" mkdir "%PROJ_DIR%\memory" >nul 2>&1
+if not exist "%PROJ_DIR%\bin\ffmpeg" mkdir "%PROJ_DIR%\bin\ffmpeg" >nul 2>&1
 if not exist "%PROJ_DIR%\agent_config.json" (
     if exist "%PROJ_DIR%\agent_config.example.json" (
         copy "%PROJ_DIR%\agent_config.example.json" "%PROJ_DIR%\agent_config.json" >nul 2>&1
     )
 )
 
+REM Prepend project-local nodejs and ffmpeg to PATH if present
+if exist "%PROJ_DIR%\nodejs" set "PATH=%PROJ_DIR%\nodejs;%PATH%"
+if exist "%PROJ_DIR%\bin\ffmpeg" set "PATH=%PROJ_DIR%\bin\ffmpeg;%PATH%"
+
 :: 1. Check Node.js runtime (with fallback paths)
 set "NODE_EXE="
 set "NPM_CMD="
 
-if exist "%ProgramFiles%\nodejs\node.exe" (
+if exist "%PROJ_DIR%\nodejs\node.exe" (
+    set "NODE_EXE=%PROJ_DIR%\nodejs\node.exe"
+    set "NPM_CMD=%PROJ_DIR%\nodejs\npm.cmd"
+)
+if not defined NODE_EXE if exist "%ProgramFiles%\nodejs\node.exe" (
     set "NODE_EXE=%ProgramFiles%\nodejs\node.exe"
     set "NPM_CMD=%ProgramFiles%\nodejs\npm.cmd"
 )
 if not defined NODE_EXE if exist "%LocalAppData%\Programs\nodejs\node.exe" (
     set "NODE_EXE=%LocalAppData%\Programs\nodejs\node.exe"
     set "NPM_CMD=%LocalAppData%\Programs\nodejs\npm.cmd"
+)
+if not defined NODE_EXE if exist "%USERPROFILE%\AppData\Local\Programs\nodejs\node.exe" (
+    set "NODE_EXE=%USERPROFILE%\AppData\Local\Programs\nodejs\node.exe"
+    set "NPM_CMD=%USERPROFILE%\AppData\Local\Programs\nodejs\npm.cmd"
 )
 if not defined NODE_EXE (
     where node >nul 2>&1
