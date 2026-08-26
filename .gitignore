@@ -72,3 +72,6 @@ LUMIN_Fix_Everything_And_Prepare_Upload.bat
 
 # Auto-added by SAFE recovery - never commit corrupt Git metadata
 .git_CORRUPT_*/
+
+dist_installer/
+*.exe
