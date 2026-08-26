@@ -644,6 +644,17 @@ export class GdmLiveAudio extends LitElement {
   @state() private activeToolStatus: 'running' | 'success' | 'failed' | null = null;
   @state() private agentErrorMessage: string | null = null;
   @state() private needsUserConfirmation = false;
+  @state() private missingModelPrompt: {
+    model: string;
+    displayName?: string;
+    size?: string;
+    reason?: string;
+    isFirstRun?: boolean;
+  } | null = null;
+  @state() private isDownloadingMissingModel = false;
+  @state() private missingModelDownloadPercent = 0;
+  @state() private missingModelDownloadStatus = '';
+  @state() private missingModelDownloadError: string | null = null;
   private responseTimerInterval: number | null = null;
 
   private startResponseTimer() {
@@ -3161,6 +3172,205 @@ export class GdmLiveAudio extends LitElement {
       100% {
         box-shadow: 0 0 20px var(--glow-color-faded);
       }
+    }
+
+    /* Production-Grade Missing Model Yes/No Modal */
+    .missing-model-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      background: rgba(4, 7, 14, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      animation: modalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: scale(0.97); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .missing-model-card {
+      width: 100%;
+      max-width: 520px;
+      background: #0b0f19;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 16px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9), 0 0 35px rgba(56, 189, 248, 0.12);
+      overflow: hidden;
+      padding: 24px;
+      color: #f1f5f9;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: relative;
+    }
+    .missing-model-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .missing-model-icon-badge {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      flex-shrink: 0;
+    }
+    .missing-model-icon-badge.starter {
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.35);
+    }
+    .missing-model-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin: 0;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+    }
+    .missing-model-subtitle {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      margin-top: 3px;
+    }
+    .missing-model-close {
+      background: transparent;
+      border: none;
+      color: #64748b;
+      font-size: 1.4rem;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0 4px;
+      transition: color 0.15s;
+    }
+    .missing-model-close:hover {
+      color: #f1f5f9;
+    }
+    .missing-model-specs-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .spec-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 0.75rem;
+      color: #cbd5e1;
+    }
+    .missing-model-reason-box {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .missing-model-progress-card {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .progress-info-line {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.82rem;
+    }
+    .progress-status-text {
+      color: #38bdf8;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+    }
+    .progress-percent-text {
+      font-family: var(--font-mono, monospace);
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+    .missing-model-progress-track {
+      width: 100%;
+      height: 7px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+    .missing-model-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #0284c7, #38bdf8);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+    .missing-model-progress-fill.indeterminate {
+      width: 40% !important;
+      animation: indeterminateBar 1.4s infinite linear;
+    }
+    @keyframes indeterminateBar {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(250%); }
+    }
+    .missing-model-error-alert {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #fca5a5;
+      font-size: 0.82rem;
+    }
+    .missing-model-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .missing-model-btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.18s ease;
+      white-space: nowrap;
+    }
+    .missing-model-btn.btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #cbd5e1;
+    }
+    .missing-model-btn.btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #ffffff;
+    }
+    .missing-model-btn.btn-primary {
+      background: #0284c7;
+      border: 1px solid #38bdf8;
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
+    }
+    .missing-model-btn.btn-primary:hover {
+      background: #0369a1;
+      box-shadow: 0 6px 20px rgba(2, 132, 199, 0.6);
     }
 
     /* Collapsible Sidebar and Terminal Pane (All Positions) */
@@ -6453,11 +6663,20 @@ export class GdmLiveAudio extends LitElement {
                 canCancel: true
               };
               this.requestUpdate();
-            } else if (structuredStatus.status === 'needs_user') {
+            } else if (structuredStatus.status === 'needs_user' || structuredStatus.type === 'model_missing' || structuredStatus.type === 'starter_model') {
               this.needsUserConfirmation = true;
+              if (structuredStatus.type === 'model_missing' || structuredStatus.type === 'starter_model' || structuredStatus.action === 'pull_model' || (structuredStatus.model && structuredStatus.prompt_user)) {
+                this.promptMissingModel({
+                  model: structuredStatus.model || 'llama3.2:3b',
+                  displayName: structuredStatus.display_name,
+                  size: structuredStatus.model_size,
+                  reason: structuredStatus.reason || structuredStatus.error || structuredStatus.message,
+                  isFirstRun: Boolean(structuredStatus.is_first_run || structuredStatus.type === 'starter_model')
+                });
+              }
               this.taskProgress = {
-                taskName: 'Confirmation Required',
-                stepDescription: structuredStatus.error || 'Agent awaits user authorization...',
+                taskName: (structuredStatus.type === 'model_missing' || structuredStatus.type === 'starter_model') ? 'Model Required' : 'Confirmation Required',
+                stepDescription: structuredStatus.reason || structuredStatus.error || 'Agent awaits user authorization...',
                 elapsedSeconds: this.responseTimer,
                 canCancel: true
               };
@@ -9762,6 +9981,270 @@ export class GdmLiveAudio extends LitElement {
     this.requestUpdate();
   }
 
+  public promptMissingModel(info: {
+    model: string;
+    displayName?: string;
+    size?: string;
+    reason?: string;
+    isFirstRun?: boolean;
+  }) {
+    soundFX.playMessageReceived();
+    this.missingModelPrompt = {
+      model: info.model || 'llama3.2:3b',
+      displayName: info.displayName || info.model || 'Llama 3.2 3B',
+      size: info.size || (info.model?.includes('1b') ? '1.3 GB' : info.model?.includes('7b') || info.model?.includes('8b') ? '4.9 GB' : '2.0 GB'),
+      reason: info.reason || `Model '${info.model}' is required for optimal local reasoning.`,
+      isFirstRun: Boolean(info.isFirstRun)
+    };
+    this.isDownloadingMissingModel = false;
+    this.missingModelDownloadPercent = 0;
+    this.missingModelDownloadStatus = '';
+    this.missingModelDownloadError = null;
+    this.needsUserConfirmation = true;
+    this.requestUpdate();
+  }
+
+  public async handleConfirmModelDownload(modelName: string) {
+    soundFX.playCommandAcknowledge();
+    const clean = (modelName || 'llama3.2:3b').trim();
+    this.isDownloadingMissingModel = true;
+    this.missingModelDownloadPercent = 0;
+    this.missingModelDownloadStatus = `Connecting to Ollama repository for ${clean}...`;
+    this.missingModelDownloadError = null;
+    this.requestUpdate();
+
+    try {
+      const response = await fetch('/api/models/pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: clean }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server returned HTTP ${response.status}`);
+      }
+
+      if (response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data: ')) continue;
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+              const percent = typeof data.percent === 'number' ? data.percent : this.missingModelDownloadPercent;
+              const status = data.message || data.status || 'Downloading...';
+
+              if (data.status === 'success' || percent >= 100) {
+                this.missingModelDownloadPercent = 100;
+                this.missingModelDownloadStatus = `✓ Installed & Ready: ${clean}`;
+                this.isDownloadingMissingModel = false;
+                this.needsUserConfirmation = false;
+                soundFX.playCommandAcknowledge();
+
+                setTimeout(async () => {
+                  this.missingModelPrompt = null;
+                  this.activeModelName = clean;
+                  this.activePlatform = 'Ollama';
+                  this.requestUpdate();
+                }, 800);
+                return;
+              } else if (data.status === 'error') {
+                this.missingModelDownloadError = data.error || 'Download failed';
+                this.isDownloadingMissingModel = false;
+                this.requestUpdate();
+                return;
+              } else {
+                this.missingModelDownloadPercent = percent;
+                this.missingModelDownloadStatus = status;
+                this.requestUpdate();
+              }
+            } catch (err) {}
+          }
+        }
+      }
+
+      this.missingModelDownloadPercent = 100;
+      this.missingModelDownloadStatus = `✓ Installed & Ready: ${clean}`;
+      this.isDownloadingMissingModel = false;
+      this.needsUserConfirmation = false;
+      setTimeout(async () => {
+        this.missingModelPrompt = null;
+        this.activeModelName = clean;
+        this.activePlatform = 'Ollama';
+        this.requestUpdate();
+      }, 800);
+    } catch (err: any) {
+      console.error('Missing model download error:', err);
+      this.missingModelDownloadError = err.message || 'Download failed';
+      this.isDownloadingMissingModel = false;
+      this.requestUpdate();
+    }
+  }
+
+  public handleCancelModelDownload() {
+    soundFX.playClick();
+    this.missingModelPrompt = null;
+    this.isDownloadingMissingModel = false;
+    this.needsUserConfirmation = false;
+    this.agentErrorMessage = null;
+    if (this.wsTerminal && this.wsTerminal.readyState === WebSocket.OPEN) {
+      this.wsTerminal.send(JSON.stringify({ type: 'input', data: 'cancel' }));
+    }
+    this.requestUpdate();
+  }
+
+  private renderMissingModelModal() {
+    if (!this.missingModelPrompt) return '';
+    const prompt = this.missingModelPrompt;
+    const modelName = prompt.model || 'llama3.2:3b';
+    const size = prompt.size || (modelName.includes('1b') ? '1.3 GB' : modelName.includes('7b') || modelName.includes('8b') ? '4.9 GB' : '2.0 GB');
+    const isDownloading = this.isDownloadingMissingModel;
+    const percent = this.missingModelDownloadPercent;
+    const downloadStatus = this.missingModelDownloadStatus || 'Downloading model layers...';
+
+    return html`
+      <div 
+        class="missing-model-overlay" 
+        id="lumin-missing-model-dialog"
+        @click=${(e: Event) => {
+          if (!isDownloading && e.target === e.currentTarget) {
+            this.handleCancelModelDownload();
+          }
+        }}
+      >
+        <div class="missing-model-card" role="dialog" aria-modal="true" aria-labelledby="missing-model-title">
+          
+          <!-- Header -->
+          <div class="missing-model-header">
+            <div class="missing-model-icon-badge ${prompt.isFirstRun ? 'starter' : ''}">
+              ${prompt.isFirstRun ? '🚀' : '⚡'}
+            </div>
+            <div style="flex: 1; min-width: 0;">
+              <h2 class="missing-model-title" id="missing-model-title">
+                ${prompt.isFirstRun ? 'Ollama Starter Model Required' : 'Download Required Model?'}
+              </h2>
+              <div class="missing-model-subtitle">
+                ${prompt.isFirstRun 
+                  ? 'First-run setup · Fast local baseline intelligence' 
+                  : 'Action requires local neural model for offline execution'}
+              </div>
+            </div>
+            ${!isDownloading ? html`
+              <button 
+                type="button" 
+                class="missing-model-close" 
+                @click=${this.handleCancelModelDownload} 
+                title="Cancel and close"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            ` : ''}
+          </div>
+
+          <!-- Spec Badges -->
+          <div class="missing-model-specs-row">
+            <div class="spec-pill name">
+              <span style="opacity: 0.65;">MODEL:</span>
+              <strong style="color: #38bdf8; font-family: var(--font-mono, monospace);">${modelName}</strong>
+            </div>
+            <div class="spec-pill size">
+              <span style="opacity: 0.65;">EST. SIZE:</span>
+              <strong>${size}</strong>
+            </div>
+            <div class="spec-pill provider">
+              <span class="status-dot green"></span>
+              <span>Ollama Engine</span>
+            </div>
+          </div>
+
+          <!-- Reason & Description Box -->
+          <div class="missing-model-reason-box">
+            <p style="margin: 0; font-size: 0.86rem; line-height: 1.55; color: #cbd5e1;">
+              ${prompt.reason || (prompt.isFirstRun 
+                ? 'No local Ollama models were found on your machine. LUMIN can pull the high-speed starter model llama3.2:3b so you can operate completely offline.' 
+                : `Model "${modelName}" is not currently present in your local Ollama library. Would you like LUMIN to download and activate it now?`)}
+            </p>
+          </div>
+
+          <!-- Download Progress Section (When active) -->
+          ${isDownloading ? html`
+            <div class="missing-model-progress-card">
+              <div class="progress-info-line">
+                <span class="progress-status-text">
+                  <span class="download-spinner-mini"></span>
+                  <span>${downloadStatus}</span>
+                </span>
+                <span class="progress-percent-text">${percent}%</span>
+              </div>
+              <div class="missing-model-progress-track">
+                <div 
+                  class="missing-model-progress-fill ${percent === 0 ? 'indeterminate' : ''}" 
+                  style="width: ${Math.max(4, percent)}%;"
+                ></div>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: #64748b; margin-top: 6px; font-family: var(--font-mono, monospace);">
+                <span>Streaming directly from Ollama Registry</span>
+                <span>${percent}% of ~${size}</span>
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Error Alert if download fails -->
+          ${this.missingModelDownloadError ? html`
+            <div class="missing-model-error-alert">
+              <span>⚠️ ${this.missingModelDownloadError}</span>
+            </div>
+          ` : ''}
+
+          <!-- Actions Footer (Yes / No) -->
+          <div class="missing-model-actions">
+            ${!isDownloading ? html`
+              <button 
+                type="button" 
+                class="missing-model-btn btn-secondary" 
+                @click=${this.handleCancelModelDownload}
+                title="Cancel and continue in offline fallback mode"
+              >
+                ✕ Cancel / Offline Fallback
+              </button>
+              <button 
+                type="button" 
+                class="missing-model-btn btn-primary" 
+                @click=${() => this.handleConfirmModelDownload(modelName)}
+                title="Download ${modelName} (${size})"
+              >
+                ⚡ Download & Activate (${size})
+              </button>
+            ` : html`
+              <button 
+                type="button" 
+                class="missing-model-btn btn-secondary" 
+                @click=${this.handleCancelModelDownload}
+                title="Abort download"
+                style="margin-left: auto;"
+              >
+                Abort
+              </button>
+            `}
+          </div>
+
+        </div>
+      </div>
+    `;
+  }
+
   private playAudioBuffer(buffer: AudioBuffer) {
     this.isSwitchingVoice = false;
     if (this.isContinuousActive) {
@@ -11138,6 +11621,9 @@ Available Effects:
                 }
                 this.requestUpdate();
               }}
+              @prompt-missing-model=${(e: CustomEvent) => {
+                this.promptMissingModel(e.detail);
+              }}
             ></lumin-model-selector>
           </div>
 
@@ -12187,6 +12673,17 @@ Available Effects:
               }
             }}
             @cancel-active-task=${() => this.cancelActiveTask()}
+            @authorize-needs-user=${() => {
+              if (!this.missingModelPrompt) {
+                this.promptMissingModel({
+                  model: this.activeModelName === 'Auto-Router' ? 'llama3.2:3b' : this.activeModelName,
+                  reason: 'Confirmation or model installation is required to proceed.'
+                });
+              }
+            }}
+            @prompt-missing-model=${(e: CustomEvent) => {
+              this.promptMissingModel(e.detail);
+            }}
           ></lumin-status-bar>
         `}
 
@@ -12204,6 +12701,9 @@ Available Effects:
           <!-- Mode 3: Settings Workspace Surface (Hidden in Cinema Mode) -->
           ${!this.isVisualizerOnlyMode && this.currentTab === 'settings' ? this.renderSettingsModeSurface() : ''}
         </main>
+
+        <!-- Missing Model Yes/No Dialog Prompt -->
+        ${this.missingModelPrompt ? this.renderMissingModelModal() : ''}
 
         <!-- Floating Settings Modal (If triggered while outside settings tab) -->
         ${!this.isVisualizerOnlyMode && this.isSettingsOpen && this.currentTab !== 'settings' ? this.renderSettingsModal() : ''}

@@ -218,3 +218,64 @@ class ModelManager:
         """Alias for unload_model."""
         return self.unload_model(model_name)
 
+    def get_missing_model_info(self, model_name: str) -> Dict[str, Any]:
+        """
+        Returns structured missing-model metadata for UI prompts and automated downloads.
+        """
+        clean_name = (model_name or "llama3.2:3b").strip()
+        mod_key = clean_name.lower().split(":")[0] if clean_name else "llama3.2"
+        size_gb = MODEL_SIZE_GB.get(clean_name, MODEL_SIZE_GB.get(mod_key, 2.0))
+        size_str = f"{size_gb:.1f} GB"
+
+        display_name = clean_name
+        if "llama3.2:3b" in clean_name.lower():
+            display_name = "Llama 3.2 3B (Fast Baseline)"
+        elif "deepseek-r1" in clean_name.lower():
+            display_name = "DeepSeek-R1 (Reasoning)"
+        elif "qwen2.5-coder" in clean_name.lower():
+            display_name = "Qwen 2.5 Coder (Engineering)"
+        elif "phi4" in clean_name.lower():
+            display_name = "Phi-4 (Logic & Reasoning)"
+        elif "minicpm" in clean_name.lower() or "llava" in clean_name.lower():
+            display_name = "Vision Multi-Modal Model"
+
+        return {
+            "model": clean_name,
+            "display_name": display_name,
+            "size_gb": size_gb,
+            "size_str": size_str,
+            "is_installed": self.is_model_installed(clean_name),
+            "reason": f"Model '{clean_name}' ({size_str}) is not currently installed in Ollama."
+        }
+
+    def check_model_readiness(self, model_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Evaluates overall Ollama and target model readiness, determining if a user
+        download prompt or first-run starter model installation is needed.
+        """
+        installed = self.list_installed_models()
+        healthy = self.provider.is_healthy() if self.provider and hasattr(self.provider, "is_healthy") else False
+        target = (model_name or self.get_active_model_setting() or "llama3.2:3b").strip()
+        if target in ("auto", "router", "auto-router"):
+            target = "llama3.2:3b"
+
+        is_target_installed = any(
+            i == target or target.startswith(i) or i.startswith(target)
+            for i in installed
+        ) if installed else False
+
+        is_first_run = len(installed) == 0
+
+        needs_prompt = not is_target_installed or is_first_run
+
+        return {
+            "healthy": healthy,
+            "is_first_run": is_first_run,
+            "target_model": target,
+            "is_installed": is_target_installed,
+            "installed_count": len(installed),
+            "installed_models": installed,
+            "needs_download_prompt": needs_prompt,
+            "missing_info": self.get_missing_model_info(target) if needs_prompt else None
+        }
+

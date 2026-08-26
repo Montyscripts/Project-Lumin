@@ -1158,9 +1158,19 @@ export class LuminModelSelector extends LitElement {
     if (!isAutoMode) {
       const modelObj = this.models.find(m => m.name === targetModel || m.name.toLowerCase() === raw);
       if (modelObj && modelObj.isInstalled === false) {
-        // Trigger download for not installed model
-        this.showToast(`Starting installation of ${targetModel}...`, 'info');
-        this.pullModel(targetModel);
+        this.isOpen = false;
+        this.isModalOpen = false;
+        this.dispatchEvent(new CustomEvent('prompt-missing-model', {
+          detail: {
+            model: targetModel,
+            displayName: modelObj.displayName,
+            size: modelObj.size,
+            reason: modelObj.recommendedUse || modelObj.description,
+            isFirstRun: false
+          },
+          bubbles: true,
+          composed: true
+        }));
         return;
       }
     }

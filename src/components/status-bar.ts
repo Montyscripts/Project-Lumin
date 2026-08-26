@@ -911,6 +911,38 @@ export class LuminStatusBar extends LitElement {
 
         </div>
 
+        <!-- Needs User Authorization / Model Download Ribbon -->
+        ${(this.needsUserConfirmation || this.agentState === 'needs_user') ? html`
+          <div class="task-progress-ribbon" id="needs-user-banner" style="background: rgba(40, 26, 6, 0.96); border-top: 1px solid rgba(245, 158, 11, 0.55);">
+            <div class="task-info-group">
+              <div class="task-name-text" style="color: #fde047; display: flex; align-items: center; gap: 5px;">
+                <span>⚡</span>
+                <span>Authorization / Model Download Required</span>
+              </div>
+              <div class="task-step-text" style="color: #fef3c7;">
+                ${this.taskProgress?.stepDescription || 'Agent requires model download or authorization to proceed.'}
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <button 
+                class="cancel-task-btn" 
+                style="background: rgba(245, 158, 11, 0.25); border-color: rgba(245, 158, 11, 0.6); color: #ffffff;" 
+                @click=${() => this.dispatchEvent(new CustomEvent('authorize-needs-user', { bubbles: true, composed: true }))} 
+                title="Review & Download Model"
+              >
+                Review & Download
+              </button>
+              <button 
+                class="cancel-task-btn" 
+                @click=${this.handleCancelTask} 
+                title="Cancel / Dismiss"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ` : ''}
+
         <!-- Error Banner Ribbon (Visible when agent error is present) -->
         ${this.agentErrorMessage ? html`
           <div class="task-progress-ribbon" id="error-banner" style="background: rgba(45, 12, 12, 0.96); border-top: 1px solid rgba(239, 68, 68, 0.45);">
