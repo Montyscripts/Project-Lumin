@@ -39,7 +39,8 @@ It pairs a real-time 3D audio-reactive sphere with voice interaction, local LLM 
   <br>
 
   <p><strong>🚀 Install</strong></p>
-  <p>From download to running in under a minute.</p>
+  <p>Requires Python 3.11–3.13, Node.js 20+, and Ollama (pull a model like <code>llama3.2:3b</code>).<br>
+  From download to running in under a minute once those are installed.</p>
   <img src="assets/Install - Lumin - Tut.gif" alt="Lumin Install" width="900">
 
   <br>
@@ -47,7 +48,8 @@ It pairs a real-time 3D audio-reactive sphere with voice interaction, local LLM 
   <br>
 
   <p><strong>🎨 Styles</strong></p>
-  <p>Different visual styles and looks of the 3D interface.</p>
+  <p>Different visual styles and looks of the 3D interface.<br>
+  Feel free to try customizing your own.</p>
   <img src="assets/Show - Lumin - Styles.gif" alt="Lumin Styles" width="900">
 
   <br>
