@@ -29,7 +29,28 @@ It pairs a real-time 3D audio-reactive sphere with voice interaction, local LLM 
 </div>
 
 <div align="center">
+  <p><strong>✨ Inspiration</strong></p>
+  <p>A quick visual vibe of what Lumin feels like.</p>
   <img src="assets/lumin-demo.gif" alt="LUMIN Demo" width="900">
+  <br><br>
+  <p><strong>🚀 Install</strong></p>
+  <p>From download to running in under a minute.</p>
+  <img src="assets/Install - Lumin.gif" alt="Lumin Install" width="900">
+  <br><br>
+  <p><strong>🎨 Styles</strong></p>
+  <p>Different visual styles and looks of the 3D interface.</p>
+  <img src="assets/Show - Lumin - Styles.gif" alt="Lumin Styles" width="900">
+  <br><br>
+  <p><strong>🎬 1-Min Showcase</strong></p>
+  <p>Live demo of voice + tools in action. Prompts used:</p>
+  <p><em>
+  Who are you in one clear sentence?<br>
+  Open Gmail in the browser right now.<br>
+  Open YouTube, search for “Star Trek intro”, then click the first video and play it.<br>
+  Analyze the attached PDF accurately. Respond only as a wise old grandfather explaining it simply.<br>
+  Summarize everything we have talked about in this conversation so far in 4 short bullets.
+  </em></p>
+  <img src="assets/1 min - Showcase - Lumin - Prompts.gif" alt="Lumin 1-Min Showcase" width="900">
 </div>
 
 ## 💡 Why Lumin?
