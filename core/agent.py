@@ -472,6 +472,16 @@ class LuminAgent:
             except Exception as e:
                 logger.error(f"Error loading agent config: {e}")
 
+    def _refresh_force_model_from_config(self):
+        """Re-reads force_model from agent_config.json so UI/server locks stay in sync with the agent process."""
+        if os.path.exists(self.config_path):
+            try:
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    self.force_model = cfg.get("force_model", None)
+            except Exception as e:
+                logger.error(f"Error refreshing force_model from config: {e}")
+
     def _save_config(self):
         """Saves current agent configurations to disk atomically."""
         try:
@@ -983,6 +993,29 @@ class LuminAgent:
     def _route_hybrid_model(self, task: str, query: str = "") -> tuple[str, str]:
         """Routes task queries to local Ollama models with explainable reasoning, resource constraints, and complexity heuristics."""
         self.local_models = self._fetch_local_models()
+
+        if self.force_model:
+            # User lock always takes priority over Resource Governor size caps and
+            # automatic routing. The user explicitly chose this model; honor it.
+            is_installed = not self.local_models or any(
+                self.force_model == inst or inst.startswith(self.force_model) or self.force_model in inst
+                for inst in self.local_models
+            )
+            if is_installed:
+                ok, f_reason = self.resource_governor.is_model_allowed(self.force_model) if hasattr(self, "resource_governor") and self.resource_governor else (True, "")
+                self.active_model = self.force_model
+                self.active_model_reason = f"user locked → {self.force_model}"
+                if not ok:
+                    print(
+                        f">>> [RESOURCE GOVERNOR]: Warning — locked model '{self.force_model}' "
+                        f"exceeds recommended resource cap ({f_reason}). "
+                        f"Honoring user lock; model may load slowly or pressure system memory."
+                    )
+                print(f">>> [LLM ROUTER]: Selected model '{self.force_model}' (User model lock active).")
+                return "ollama", self.force_model
+            else:
+                print(f">>> [LLM ROUTER]: Locked model '{self.force_model}' is not installed locally. Falling back to next available model.")
+
         complexity = self._assess_complexity(query, task)
 
         reason = f"Domain: '{task}', Complexity: '{complexity}'"
@@ -1022,22 +1055,6 @@ class LuminAgent:
                     self.active_model_reason = f"uncensored writing → {m}"
                     print(f">>> [LLM ROUTER]: Selected model '{m}' ({reason} -> Uncensored local model).")
                     return "ollama", m
-
-        if self.force_model:
-            ok, f_reason = self.resource_governor.is_model_allowed(self.force_model) if hasattr(self, "resource_governor") and self.resource_governor else (True, "")
-            is_installed = not self.local_models or any(
-                self.force_model == inst or inst.startswith(self.force_model) or self.force_model in inst
-                for inst in self.local_models
-            )
-            if ok and is_installed:
-                self.active_model = self.force_model
-                self.active_model_reason = f"user locked → {self.force_model}"
-                print(f">>> [LLM ROUTER]: Selected model '{self.force_model}' (User model lock active).")
-                return "ollama", self.force_model
-            elif not ok:
-                print(f">>> [RESOURCE GOVERNOR]: Locked model '{self.force_model}' rejected ({f_reason}). Overriding lock.")
-            elif not is_installed:
-                print(f">>> [LLM ROUTER]: Locked model '{self.force_model}' is not installed locally. Falling back to next available model.")
 
         if self.local_models:
             # Multi-Signal Model Selection consuming modality, complexity, and loaded residency
@@ -4969,6 +4986,7 @@ class LuminAgent:
 
     def process_query(self, query: str, attachments_input: list = None):
         """Standard pipeline: retrieve memory context, classify, route, execute, and respond."""
+        self._refresh_force_model_from_config()
         query = query.strip() if isinstance(query, str) else str(query)
         if not query:
             return
@@ -5108,14 +5126,17 @@ class LuminAgent:
                     flush_stdout()
                     return analysis_result
 
-                coding_candidates = ["qwen2.5-coder:7b", "phi4-mini", "llama3.2:3b"]
-                active_coder = "llama3.2:3b"
-                for m_cand in coding_candidates:
-                    if m_cand in self.local_models:
-                        active_coder = m_cand
-                        break
-                
-                print(f">>> [LUMIN FILE ROUTER]: Routing to '{active_coder}' for high-fidelity code analysis...")
+                if self.force_model:
+                    active_coder = self.force_model
+                    print(f">>> [LUMIN FILE ROUTER]: Using user locked model '{active_coder}' for high-fidelity code analysis...")
+                else:
+                    coding_candidates = ["qwen2.5-coder:7b", "phi4-mini", "llama3.2:3b"]
+                    active_coder = "llama3.2:3b"
+                    for m_cand in coding_candidates:
+                        if m_cand in self.local_models:
+                            active_coder = m_cand
+                            break
+                    print(f">>> [LUMIN FILE ROUTER]: Routing to '{active_coder}' for high-fidelity code analysis...")
                 flush_stdout()
                 
                 # Call Ollama
@@ -5301,16 +5322,19 @@ class LuminAgent:
             )
 
             self.local_models = self._fetch_local_models()
-            active_model = getattr(self, "force_model", None) or getattr(self, "active_model", None) or "llama3.2:3b"
-            preferred = ("qwen2.5:7b", "phi4-mini", "llama3.2:3b", "gemma3:4b", "mistral:7b")
-            for cand in preferred:
-                for inst in (self.local_models or []):
-                    if cand == inst or inst.startswith(cand) or cand in inst:
-                        active_model = inst
-                        break
-                else:
-                    continue
-                break
+            if getattr(self, "force_model", None):
+                active_model = self.force_model
+            else:
+                active_model = getattr(self, "active_model", None) or "llama3.2:3b"
+                preferred = ("qwen2.5:7b", "phi4-mini", "llama3.2:3b", "gemma3:4b", "mistral:7b")
+                for cand in preferred:
+                    for inst in (self.local_models or []):
+                        if cand == inst or inst.startswith(cand) or cand in inst:
+                            active_model = inst
+                            break
+                    else:
+                        continue
+                    break
 
             user_prompt = (
                 "Below is the complete conversation history between the user and LUMIN.\n"
@@ -5733,54 +5757,64 @@ class LuminAgent:
             # Decide override category
             is_audio_intent = any(kw in low_query for kw in ("transcribe", "transcript", "transcription", "lyrics", "what was said", "what are they saying", "what were they saying", "what did they say", "words to this song", "words to the song", "spoken", "speech", "dialogue"))
             if is_audio_intent and is_previous_video:
-                # Video audio / lyrics route: Stronger reasoning model for parsing speech/lyrics
-                reasoning_candidates = ["phi4-mini", "qwen2.5:7b", "llama3.2:3b"]
-                best_reasoning_model = None
-                for r_mod in reasoning_candidates:
-                    if r_mod in self.local_models:
-                        best_reasoning_model = r_mod
-                        break
-                if best_reasoning_model:
-                    active_model = best_reasoning_model
-                    client_type = "ollama"
-                    bypass_msg = f" (bypassing locked model '{self.force_model}')" if self.force_model else ""
-                    print(f">>> [AUDIO ROUTING]: Temporarily switching to reasoning model '{active_model}'{bypass_msg} for video transcription analysis.")
-                    flush_stdout()
-            elif (has_vision_followup and has_previous_image) or (has_vision_followup and is_previous_video and not is_video_missing_tools):
-                # Vision/Video route: Vision model
-                best_vision_model = self._get_best_vision_model()
-                if has_previous_image:
-                    image_path = self.last_analyzed_image
-                
-                if best_vision_model:
-                    active_model = best_vision_model
-                    client_type = "ollama"
-                    
-                    bypass_msg = f" (bypassing locked model '{self.force_model}')" if self.force_model else ""
-                    if has_previous_image:
-                        print(f">>> [VISION OVERRIDE]: Temporarily switching to best vision model '{active_model}'{bypass_msg} with original image '{os.path.basename(image_path)}'.")
-                    else:
-                        print(f">>> [VISION OVERRIDE]: Temporarily switching to best vision model '{active_model}'{bypass_msg} with file '{os.path.basename(self.last_analyzed_file)}'.")
+                if self.force_model:
+                    print(f">>> [AUDIO ROUTING]: Keeping user locked model '{self.force_model}' for video transcription analysis.")
                     flush_stdout()
                 else:
-                    print(f">>> [VISION DEGRADATION]: Relying on enhanced local image visual analysis engine.")
+                    # Video audio / lyrics route: Stronger reasoning model for parsing speech/lyrics
+                    reasoning_candidates = ["phi4-mini", "qwen2.5:7b", "llama3.2:3b"]
+                    best_reasoning_model = None
+                    for r_mod in reasoning_candidates:
+                        if r_mod in self.local_models:
+                            best_reasoning_model = r_mod
+                            break
+                    if best_reasoning_model:
+                        active_model = best_reasoning_model
+                        client_type = "ollama"
+                        print(f">>> [AUDIO ROUTING]: Temporarily switching to reasoning model '{active_model}' for video transcription analysis.")
+                        flush_stdout()
+            elif (has_vision_followup and has_previous_image) or (has_vision_followup and is_previous_video and not is_video_missing_tools):
+                if has_previous_image:
+                    image_path = self.last_analyzed_image
+                if self.force_model:
+                    if has_previous_image:
+                        print(f">>> [VISION OVERRIDE]: Keeping user locked model '{self.force_model}' with original image '{os.path.basename(image_path)}'.")
+                    else:
+                        print(f">>> [VISION OVERRIDE]: Keeping user locked model '{self.force_model}' with file '{os.path.basename(self.last_analyzed_file)}'.")
                     flush_stdout()
+                else:
+                    # Vision/Video route: Vision model
+                    best_vision_model = self._get_best_vision_model()
+                    if best_vision_model:
+                        active_model = best_vision_model
+                        client_type = "ollama"
+                        if has_previous_image:
+                            print(f">>> [VISION OVERRIDE]: Temporarily switching to best vision model '{active_model}' with original image '{os.path.basename(image_path)}'.")
+                        else:
+                            print(f">>> [VISION OVERRIDE]: Temporarily switching to best vision model '{active_model}' with file '{os.path.basename(self.last_analyzed_file)}'.")
+                        flush_stdout()
+                    else:
+                        print(f">>> [VISION DEGRADATION]: Relying on enhanced local image visual analysis engine.")
+                        flush_stdout()
                 
             elif (has_doc_followup or has_vision_followup) and has_previous_file:
-                # Document/Archive route: Stronger reasoning model
-                reasoning_candidates = ["phi4-mini", "qwen2.5:7b", "llama3.2:3b"]
-                best_reasoning_model = None
-                for r_mod in reasoning_candidates:
-                    if r_mod in self.local_models:
-                        best_reasoning_model = r_mod
-                        break
-                
-                if best_reasoning_model:
-                    active_model = best_reasoning_model
-                    client_type = "ollama"
-                    bypass_msg = f" (bypassing locked model '{self.force_model}')" if self.force_model else ""
-                    print(f">>> [REASONING OVERRIDE]: Temporarily switching to stronger reasoning model '{active_model}'{bypass_msg} for file/document follow-up.")
+                if self.force_model:
+                    print(f">>> [REASONING OVERRIDE]: Keeping user locked model '{self.force_model}' for file/document follow-up.")
                     flush_stdout()
+                else:
+                    # Document/Archive route: Stronger reasoning model
+                    reasoning_candidates = ["phi4-mini", "qwen2.5:7b", "llama3.2:3b"]
+                    best_reasoning_model = None
+                    for r_mod in reasoning_candidates:
+                        if r_mod in self.local_models:
+                            best_reasoning_model = r_mod
+                            break
+                    
+                    if best_reasoning_model:
+                        active_model = best_reasoning_model
+                        client_type = "ollama"
+                        print(f">>> [REASONING OVERRIDE]: Temporarily switching to stronger reasoning model '{active_model}' for file/document follow-up.")
+                        flush_stdout()
             
         print(f">>> [HYBRID ROUTER]: Task='{task}' -> Platform={client_type.upper()} Model={active_model}")
         flush_stdout()
@@ -5789,23 +5823,30 @@ class LuminAgent:
         use_vision, pdf_img_path, simple_mode, doc_sys_ext = self._determine_document_routing(original_user_query, query)
 
         if use_vision:
-            best_vis = self._get_best_vision_model()
-            if best_vis:
-                active_model = best_vis
-                client_type = "ollama"
-                if pdf_img_path and os.path.exists(pdf_img_path):
-                    image_path = pdf_img_path
-                    self.last_analyzed_image = pdf_img_path
-                bypass_msg = f" (bypassing locked model '{self.force_model}')" if self.force_model else ""
-                print(f">>> [SCANNED PDF ROUTER]: Scanned/image-heavy PDF detected. Routing to vision model '{active_model}'{bypass_msg}.")
+            if pdf_img_path and os.path.exists(pdf_img_path):
+                image_path = pdf_img_path
+                self.last_analyzed_image = pdf_img_path
+            if self.force_model:
+                print(f">>> [SCANNED PDF ROUTER]: Scanned/image-heavy PDF detected. Keeping user locked model '{self.force_model}'.")
                 flush_stdout()
+            else:
+                best_vis = self._get_best_vision_model()
+                if best_vis:
+                    active_model = best_vis
+                    client_type = "ollama"
+                    print(f">>> [SCANNED PDF ROUTER]: Scanned/image-heavy PDF detected. Routing to vision model '{active_model}'.")
+                    flush_stdout()
         elif task == "document_analysis" or "DOCUMENT INGESTION STATUS" in query or "EXTRACTION METADATA" in query:
-            best_doc = self._get_best_document_model()
-            if best_doc:
-                active_model = best_doc
-                client_type = "ollama"
-                print(f">>> [TEXT PDF ROUTER]: Text-based PDF/document detected. Routing to document model '{active_model}'.")
+            if self.force_model:
+                print(f">>> [TEXT PDF ROUTER]: Text-based PDF/document detected. Keeping user locked model '{self.force_model}'.")
                 flush_stdout()
+            else:
+                best_doc = self._get_best_document_model()
+                if best_doc:
+                    active_model = best_doc
+                    client_type = "ollama"
+                    print(f">>> [TEXT PDF ROUTER]: Text-based PDF/document detected. Routing to document model '{active_model}'.")
+                    flush_stdout()
 
         if simple_mode:
             print(f">>> [ELI5 SIMPLE LANGUAGE ROUTER]: Activated child-friendly/ELI5 prompt instruction.")
