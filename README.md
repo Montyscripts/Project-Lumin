@@ -31,7 +31,7 @@ It pairs a real-time 3D audio-reactive sphere with voice interaction, local LLM 
 <div align="center">
 
   <p><strong>✨ Inspiration</strong></p>
-  <p>A short Star Trek: Strange New Worlds meme GIF.</p>
+  <p>A short Star Trek: Strange New Worlds GIF.</p>
   <img src="assets/lumin-demo.gif" alt="LUMIN Demo" width="900">
 
   <br>
