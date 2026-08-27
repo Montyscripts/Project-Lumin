@@ -23,7 +23,7 @@ It pairs a real-time 3D audio-reactive sphere with voice interaction, local LLM 
 
 > **Current status**: Early prototype. Many features work on the author’s machine. Cross-platform reliability and polish are still limited. This is not a production-ready product. 
 
-[Quick Start](#-quick-start) • [Current Capabilities](#-current-capabilities) • [Interface & Modes](#-workspace-modes) • [Dual MCP Engine](#-model-context-protocol-dual-mcp-engine) • [System Architecture](#-system-architecture) • [Roadmap](#-roadmap--current-status) • [Contributing](CONTRIBUTING.md)
+[Quick Start](#-quick-start) • [Current Capabilities](#-current-capabilities) • [Interface & Modes](#-workspace-modes) • [Dual MCP Engine](#-model-context-protocol-dual-mcp-engine) • [System Architecture](#-system-architecture-the-4-pillars) • [Roadmap](#-roadmap--current-status) • [Contributing](#-contributing--community)
 
 ---
 </div>
@@ -31,7 +31,7 @@ It pairs a real-time 3D audio-reactive sphere with voice interaction, local LLM 
 <div align="center">
 
   <p><strong>✨ Inspiration</strong></p>
-  <p>Star Trek: Strange New Worlds GIF.</p>
+  <p>A short Star Trek: Strange New Worlds meme GIF.</p>
   <img src="assets/lumin-demo.gif" alt="LUMIN Demo" width="900">
 
   <br>
