@@ -23,7 +23,7 @@ It pairs a real-time 3D audio-reactive sphere with voice interaction, local LLM 
 
 > **Current status**: Early prototype. Many features work on the author’s machine. Cross-platform reliability and polish are still limited. This is not a production-ready product. 
 
-[Quick Start](#-quick-start) • [Current Capabilities](#-current-capabilities) • [Interface & Modes](#workspace-modes) • [Dual MCP Engine](#-model-context-protocol-dual-mcp-engine) • [System Architecture](#system-architecture-the-4-pillars) • [Roadmap](#roadmap--current-status) • [Contributing](#-contributing--community)
+[Quick Start](#-quick-start) • [Current Capabilities](#-current-capabilities) • [Interface & Modes](#-workspace-modes) • [Dual MCP Engine](#-model-context-protocol-dual-mcp-engine) • [System Architecture](#-system-architecture-the-4-pillars) • [Roadmap](#-roadmap--current-status) • [Contributing](#-contributing--community)
 
 ---
 </div>
@@ -100,7 +100,7 @@ Most voice assistants rely on continuous cloud telemetry, high-latency API round
 
 ---
 
-## Workspace Modes
+## 💻 Workspace Modes
 
 Lumin provides three primary workspace modes plus an ambient presentation mode:
 
@@ -264,7 +264,7 @@ This part of the system is functional but still early and not fully hardened for
 
 ---
 
-## System Architecture (The 4 Pillars)
+## 🧱 System Architecture (The 4 Pillars)
 
 ```
 Project-Lumin/
@@ -330,7 +330,7 @@ Results vary significantly with model size, quantization, and system load.
 
 ---
 
-## Roadmap & Current Status
+## 📍 Roadmap & Current Status
 
 **Currently working / mostly working**
 * [x] Task-driven dynamic Ollama model routing
