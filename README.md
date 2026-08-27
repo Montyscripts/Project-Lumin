@@ -86,76 +86,96 @@ Lumin provides three primary workspace modes plus an ambient presentation mode:
 
 ## 🚀 Quick Start
 
-> **Python Requirement**: Lumin supports **Python 3.11, 3.12, and 3.13**. Python 3.14+ is not supported (C-extension and NumPy issues).
+### Requirements (install these first)
 
-### 1. Windows
+| Requirement | Version | Download |
+|-------------|---------|----------|
+| **Python** | 3.11, 3.12, or 3.13 | [python.org](https://www.python.org/downloads/) |
+| **Node.js** | LTS (20+) | [nodejs.org](https://nodejs.org/) |
+| **Ollama** | Latest | [ollama.com](https://ollama.com/) |
 
-1. **First-Time Installation**  
-   Run `install_windows.bat` once:
+> **Important**: Python 3.14+ is not supported (C-extension / NumPy compatibility issues).  
+> After installing Ollama, pull a starter model:  
+> `ollama pull llama3.2:3b`
 
-   ```cmd
-   install_windows.bat
-   ```
+---
 
-   This attempts to configure a supported Python runtime, create a virtual environment, install dependencies, and prepare Ollama.
+### 1. Windows (Recommended)
 
-2. **Daily Launch**  
-   Double-click `start_app.bat`:
+**Option A — Setup Installer (easiest)**
 
-   ```cmd
-   start_app.bat
-   ```
+1. Install the three requirements above.
+2. Download and run the latest `LUMIN-Setup-*.exe` from the [Releases](https://github.com/Montyscripts/Project-Lumin/releases) page (or build it from `installer/lumin.iss`).
+3. After installation, launch **LUMIN** from the Start Menu or desktop shortcut.
+4. The app opens at **http://localhost:3000**.
 
-   The application should open the UI at **`http://localhost:3000`**.
+**Option B — From source**
 
-   *Helper scripts:*
-   * `start_app_debug.bat` — Foreground console mode with live logs.
-   * `start_agent.bat` — CLI-only agent runner.
-   * `stop_app.bat` — Stops Lumin processes and frees port 3000.
+```cmd
+git clone https://github.com/Montyscripts/Project-Lumin.git
+cd Project-Lumin
 
-> Note: The Windows scripts are still early. Manual intervention may be required if something fails.
+install_windows.bat
+start_app.bat
+```
+
+`install_windows.bat` creates the Python virtual environment and installs frontend packages.  
+It does **not** install Python, Node.js, or Ollama — those must already be present.
+
+**Daily use**
+
+| Script | Purpose |
+|--------|---------|
+| `start_app.bat` / `Lumin.exe` | Normal silent launch |
+| `start_app_debug.bat` | Foreground console with live logs |
+| `start_agent.bat` | CLI-only agent |
+| `stop_app.bat` | Stop background services |
 
 ---
 
 ### 2. Linux & macOS
 
-Ensure **Python 3.11–3.13**, **Node.js 20+**, and **Ollama** are installed.
-
 ```bash
-# 1. Clone the repository
+# 1. Install prerequisites
+#    Python 3.11–3.13, Node.js 20+, Ollama
+
+# 2. Clone and set up
 git clone https://github.com/Montyscripts/Project-Lumin.git
 cd Project-Lumin
 
-# 2. Create virtual environment and install dependencies
 python -m venv venv
-source venv/bin/activate
+source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# 3. Start the agent
+npm install
+npm run build                     # or npm run dev for development
+
+# 3. Pull a model (if you haven't already)
+ollama pull llama3.2:3b
+
+# 4. Launch
+# Terminal 1 – agent
 python agent.py
 
-# 4. In a separate terminal, launch the web application
-npm install
+# Terminal 2 – web UI
 npm run dev
+# or: node server.js
 ```
 
-Open `http://localhost:3000` in a modern browser.
+Open **http://localhost:3000** in a modern browser.
 
 ---
 
-### 3. Docker & Docker Compose (Early)
+### 3. Docker (Experimental)
 
 ```bash
-# Start full stack (Web app + Python backend + Ollama)
 docker-compose up -d
-
-# View live agent logs
 docker-compose logs -f lumin-agent
 ```
 
-Access the web interface at `http://localhost:3000`.
+Access the UI at **http://localhost:3000**.
 
-> **GPU Passthrough**: For NVIDIA CUDA acceleration, uncomment the relevant block in `docker-compose.yml`. This path is still experimental.
+> GPU passthrough for NVIDIA is available in `docker-compose.yml` but still experimental.
 
 ---
 
