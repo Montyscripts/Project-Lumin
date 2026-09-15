@@ -384,19 +384,17 @@ export function renderVoiceSettingsSection(host: any): TemplateResult {
               id="piper-voice-select"
               .value=${host.piperVoice || 'en-US-JennyNeural'}
               @change=${(e: Event) => {
-                const selected = (e.target as HTMLSelectElement).value;
-                host.piperVoice = selected;
-                localStorage.setItem('project_lumin_piper_voice', selected);
+                let selected = (e.target as HTMLSelectElement).value;
+                if (selected.toLowerCase().startsWith('set ')) selected = selected.substring(4).trim();
+                if (selected.toLowerCase() === 'set') selected = 'en-US-JennyNeural';
                 soundFX.playClick();
-                if (host.wsTerminal && host.wsTerminal.readyState === WebSocket.OPEN) {
-                  try {
-                    host.wsTerminal.send(JSON.stringify({
-                      type: 'input',
-                      data: `voice set ${selected}`
-                    }));
-                  } catch (err) {}
+                if (typeof (host as any).setTtsVoice === 'function') {
+                  (host as any).setTtsVoice(selected);
+                } else {
+                  host.piperVoice = selected;
+                  localStorage.setItem('project_lumin_piper_voice', selected);
+                  host.requestUpdate();
                 }
-                host.requestUpdate();
               }}>
               <optgroup label="🇺🇸 English (US) — Recommended">
                 <option value="en-US-JennyNeural">Jenny (en-US) — Warm & Conversational (Default)</option>

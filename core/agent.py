@@ -4517,30 +4517,135 @@ class LuminAgent:
             except Exception as e:
                 return f"Error retrieving programmatic voices list: {e}"
 
+        # Voice switching command handling (e.g. "voice en-US-GuyNeural", "voice set en-US-GuyNeural", "change voice to en-US-GuyNeural")
+        is_voice_change = False
+        raw_voice_arg = ""
         if low.startswith("voice "):
-            requested_voice = user_input.strip()[6:].strip()
-            new_voice = requested_voice
-            if TTS_AVAILABLE:
-                import asyncio
-                import edge_tts
-                try:
-                    voices_list = asyncio.run(edge_tts.list_voices())
-                    # Build case-insensitive lookup map
-                    voice_map = {v.get("ShortName", "").lower(): v.get("ShortName", "") for v in voices_list}
-                    matched_voice = voice_map.get(requested_voice.lower())
-                    if matched_voice:
-                        new_voice = matched_voice
-                    else:
-                        # Partial substring case-insensitive match (e.g. "natashaneural" -> "en-AU-NatashaNeural")
-                        partial_matches = [v for k, v in voice_map.items() if requested_voice.lower() in k]
-                        if partial_matches:
-                            new_voice = partial_matches[0]
-                except Exception as ex:
-                    logger.debug(f"Edge-TTS voices list retrieval failed during voice change: {ex}")
+            is_voice_change = True
+            raw_voice_arg = user_input.strip()[6:].strip()
+        elif low.startswith("set voice "):
+            is_voice_change = True
+            raw_voice_arg = user_input.strip()[10:].strip()
+        elif low.startswith("change voice ") or low.startswith("switch voice "):
+            is_voice_change = True
+            raw_voice_arg = user_input.strip()[13:].strip()
 
+        if is_voice_change:
+            clean_arg = raw_voice_arg
+            if clean_arg.lower().startswith("to "):
+                clean_arg = clean_arg[3:].strip()
+            elif clean_arg.lower().startswith("set "):
+                clean_arg = clean_arg[4:].strip()
+            clean_arg = clean_arg.rstrip(".").strip()
+
+            if not clean_arg or clean_arg.lower() == "set":
+                clean_arg = "en-US-JennyNeural"
+
+            canonical_map = {
+                # US English Neural
+                "en-us-jennyneural": "en-US-JennyNeural",
+                "jenny": "en-US-JennyNeural",
+                "en-us-guyneural": "en-US-GuyNeural",
+                "guy": "en-US-GuyNeural",
+                "en-us-arianeural": "en-US-AriaNeural",
+                "aria": "en-US-AriaNeural",
+                "en-us-davisneural": "en-US-DavisNeural",
+                "davis": "en-US-DavisNeural",
+                "en-us-amberneural": "en-US-AmberNeural",
+                "amber": "en-US-AmberNeural",
+                "en-us-ananeural": "en-US-AnaNeural",
+                "ana": "en-US-AnaNeural",
+                "en-us-andrewneural": "en-US-AndrewNeural",
+                "andrew": "en-US-AndrewNeural",
+                "en-us-christopherneural": "en-US-ChristopherNeural",
+                "christopher": "en-US-ChristopherNeural",
+                "en-us-ericneural": "en-US-EricNeural",
+                "eric": "en-US-EricNeural",
+                "en-us-michelleneural": "en-US-MichelleNeural",
+                "michelle": "en-US-MichelleNeural",
+                "en-us-rogerneural": "en-US-RogerNeural",
+                "roger": "en-US-RogerNeural",
+                "en-us-steffanneural": "en-US-SteffanNeural",
+                "steffan": "en-US-SteffanNeural",
+                # UK English Neural
+                "en-gb-sonianeural": "en-GB-SoniaNeural",
+                "sonia": "en-GB-SoniaNeural",
+                "en-gb-ryanneural": "en-GB-RyanNeural",
+                "ryan": "en-GB-RyanNeural",
+                "en-gb-libbyneural": "en-GB-LibbyNeural",
+                "libby": "en-GB-LibbyNeural",
+                "en-gb-thomasneural": "en-GB-ThomasNeural",
+                "thomas": "en-GB-ThomasNeural",
+                # Global Accents
+                "en-au-natashaneural": "en-AU-NatashaNeural",
+                "natasha": "en-AU-NatashaNeural",
+                "en-au-williamneural": "en-AU-WilliamNeural",
+                "william": "en-AU-WilliamNeural",
+                "en-ca-claraneural": "en-CA-ClaraNeural",
+                "clara": "en-CA-ClaraNeural",
+                "en-ca-liamneural": "en-CA-LiamNeural",
+                "liam": "en-CA-LiamNeural",
+                "en-ie-emilyneural": "en-IE-EmilyNeural",
+                "emily": "en-IE-EmilyNeural",
+                "en-in-neerjaneural": "en-IN-NeerjaNeural",
+                "neerja": "en-IN-NeerjaNeural",
+                "en-in-prabhatneural": "en-IN-PrabhatNeural",
+                "prabhat": "en-IN-PrabhatNeural",
+                # Multilingual Neural
+                "es-es-elviraneural": "es-ES-ElviraNeural",
+                "elvira": "es-ES-ElviraNeural",
+                "es-mx-dalianeural": "es-MX-DaliaNeural",
+                "dalia": "es-MX-DaliaNeural",
+                "fr-fr-deniseneural": "fr-FR-DeniseNeural",
+                "denise": "fr-FR-DeniseNeural",
+                "fr-fr-henrineural": "fr-FR-HenriNeural",
+                "henri": "fr-FR-HenriNeural",
+                "de-de-katjaneural": "de-DE-KatjaNeural",
+                "katja": "de-DE-KatjaNeural",
+                "de-de-killianneural": "de-DE-KillianNeural",
+                "killian": "de-DE-KillianNeural",
+                "it-it-elsaneural": "it-IT-ElsaNeural",
+                "elsa": "it-IT-ElsaNeural",
+                "ja-jp-nanamineural": "ja-JP-NanamiNeural",
+                "nanami": "ja-JP-NanamiNeural",
+                "zh-cn-xiaoxiaoneural": "zh-CN-XiaoxiaoNeural",
+                "xiaoxiao": "zh-CN-XiaoxiaoNeural",
+                # Piper voices
+                "en_us-lessac-medium": "en-US-GuyNeural",
+                "lessac": "en-US-GuyNeural",
+                "en_us-amy-medium": "en-US-JennyNeural",
+                "amy": "en-US-JennyNeural",
+                "en_gb-alan-medium": "en-GB-RyanNeural",
+                "alan": "en-GB-RyanNeural"
+            }
+
+            matched = canonical_map.get(clean_arg.lower())
+            if not matched:
+                for k, v in canonical_map.items():
+                    if len(clean_arg) > 2 and (clean_arg.lower() in k or k in clean_arg.lower()):
+                        matched = v
+                        break
+
+            if not matched and TTS_AVAILABLE:
+                try:
+                    import asyncio
+                    import edge_tts
+                    voices_list = asyncio.run(edge_tts.list_voices())
+                    voice_map = {v.get("ShortName", "").lower(): v.get("ShortName", "") for v in voices_list}
+                    matched = voice_map.get(clean_arg.lower())
+                    if not matched:
+                        partial = [v for k, v in voice_map.items() if clean_arg.lower() in k]
+                        if partial:
+                            matched = partial[0]
+                except Exception as ex:
+                    logger.debug(f"Edge-TTS dynamic voice list retrieval failed: {ex}")
+
+            new_voice = matched if matched else clean_arg
             cfg = self.tool_registry._get_config()
             cfg["tts_voice"] = new_voice
             self.tool_registry._save_config(cfg)
+            if hasattr(self, "local_tts") and self.local_tts:
+                self.local_tts.voice = new_voice
             return f"Successfully switched default speech synthesis voice to: {new_voice}."
 
         if low.startswith("dryrun "):

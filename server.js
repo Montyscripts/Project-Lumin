@@ -597,6 +597,34 @@ wss.on('connection', (ws) => {
         } else {
           setTimeout(sendInputToProc, 800);
         }
+      } else if (parsed.type === 'config') {
+        if (parsed.voice) {
+          const resolved = resolveTtsVoice(parsed.voice);
+          const configPath = path.join(__dirname, 'agent_config.json');
+          let config = {};
+          try {
+            if (fs.existsSync(configPath)) {
+              config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            } else {
+              const examplePath = path.join(__dirname, 'agent_config.example.json');
+              if (fs.existsSync(examplePath)) {
+                config = JSON.parse(fs.readFileSync(examplePath, 'utf8'));
+              }
+            }
+          } catch (e) {}
+          config.tts_voice = resolved;
+          try {
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+            console.log(`[Server] Saved updated tts_voice from WebSocket: ${resolved}`);
+          } catch (e) {
+            console.error('[Server] Failed to save tts_voice to agent_config.json:', e);
+          }
+          if (agentProcess && agentProcess.stdin) {
+            try {
+              agentProcess.stdin.write(JSON.stringify({ text: `voice ${resolved}` }) + '\n');
+            } catch (err) {}
+          }
+        }
       } else if (parsed.type === 'unload') {
         console.log('[Server] Client sent explicit unload message.');
         clients.delete(ws);
@@ -938,9 +966,17 @@ app.post('/api/config', (req, res) => {
       config = JSON.parse(fs.readFileSync(examplePath, 'utf8'));
     }
     if (req.body && typeof req.body === 'object') {
+      if (req.body.tts_voice) {
+        req.body.tts_voice = resolveTtsVoice(req.body.tts_voice);
+      }
       Object.assign(config, req.body);
     }
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    if (req.body?.tts_voice && agentProcess && agentProcess.stdin) {
+      try {
+        agentProcess.stdin.write(JSON.stringify({ text: `voice ${config.tts_voice}` }) + '\n');
+      } catch (err) {}
+    }
     res.json({ success: true, config });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1640,6 +1676,108 @@ app.post('/api/shutdown', (req, res) => {
   }, delay);
 });
 
+const CANONICAL_EDGE_VOICES = {
+  'en-us-jennyneural': 'en-US-JennyNeural',
+  'jenny': 'en-US-JennyNeural',
+  'en-us-guyneural': 'en-US-GuyNeural',
+  'guy': 'en-US-GuyNeural',
+  'en-us-arianeural': 'en-US-AriaNeural',
+  'aria': 'en-US-AriaNeural',
+  'en-us-davisneural': 'en-US-DavisNeural',
+  'davis': 'en-US-DavisNeural',
+  'en-us-amberneural': 'en-US-AmberNeural',
+  'amber': 'en-US-AmberNeural',
+  'en-us-ananeural': 'en-US-AnaNeural',
+  'ana': 'en-US-AnaNeural',
+  'en-us-andrewneural': 'en-US-AndrewNeural',
+  'andrew': 'en-US-AndrewNeural',
+  'en-us-christopherneural': 'en-US-ChristopherNeural',
+  'christopher': 'en-US-ChristopherNeural',
+  'en-us-ericneural': 'en-US-EricNeural',
+  'eric': 'en-US-EricNeural',
+  'en-us-michelleneural': 'en-US-MichelleNeural',
+  'michelle': 'en-US-MichelleNeural',
+  'en-us-rogerneural': 'en-US-RogerNeural',
+  'roger': 'en-US-RogerNeural',
+  'en-us-steffanneural': 'en-US-SteffanNeural',
+  'steffan': 'en-US-SteffanNeural',
+  'en-gb-sonianeural': 'en-GB-SoniaNeural',
+  'sonia': 'en-GB-SoniaNeural',
+  'en-gb-ryanneural': 'en-GB-RyanNeural',
+  'ryan': 'en-GB-RyanNeural',
+  'en-gb-libbyneural': 'en-GB-LibbyNeural',
+  'libby': 'en-GB-LibbyNeural',
+  'en-gb-thomasneural': 'en-GB-ThomasNeural',
+  'thomas': 'en-GB-ThomasNeural',
+  'en-au-natashaneural': 'en-AU-NatashaNeural',
+  'natasha': 'en-AU-NatashaNeural',
+  'en-au-williamneural': 'en-AU-WilliamNeural',
+  'william': 'en-AU-WilliamNeural',
+  'en-ca-claraneural': 'en-CA-ClaraNeural',
+  'clara': 'en-CA-ClaraNeural',
+  'en-ca-liamneural': 'en-CA-LiamNeural',
+  'liam': 'en-CA-LiamNeural',
+  'en-ie-emilyneural': 'en-IE-EmilyNeural',
+  'emily': 'en-IE-EmilyNeural',
+  'en-in-neerjaneural': 'en-IN-NeerjaNeural',
+  'neerja': 'en-IN-NeerjaNeural',
+  'en-in-prabhatneural': 'en-IN-PrabhatNeural',
+  'prabhat': 'en-IN-PrabhatNeural',
+  'es-es-elviraneural': 'es-ES-ElviraNeural',
+  'elvira': 'es-ES-ElviraNeural',
+  'es-mx-dalianeural': 'es-MX-DaliaNeural',
+  'dalia': 'es-MX-DaliaNeural',
+  'fr-fr-deniseneural': 'fr-FR-DeniseNeural',
+  'denise': 'fr-FR-DeniseNeural',
+  'fr-fr-henrineural': 'fr-FR-HenriNeural',
+  'henri': 'fr-FR-HenriNeural',
+  'de-de-katjaneural': 'de-DE-KatjaNeural',
+  'katja': 'de-DE-KatjaNeural',
+  'de-de-killianneural': 'de-DE-KillianNeural',
+  'killian': 'de-DE-KillianNeural',
+  'it-it-elsaneural': 'it-IT-ElsaNeural',
+  'elsa': 'it-IT-ElsaNeural',
+  'ja-jp-nanamineural': 'ja-JP-NanamiNeural',
+  'nanami': 'ja-JP-NanamiNeural',
+  'zh-cn-xiaoxiaoneural': 'zh-CN-XiaoxiaoNeural',
+  'xiaoxiao': 'zh-CN-XiaoxiaoNeural',
+  // Piper fast checkpoint mappings to natural neural voices
+  'en_us-lessac-medium': 'en-US-GuyNeural',
+  'lessac': 'en-US-GuyNeural',
+  'en_us-amy-medium': 'en-US-JennyNeural',
+  'amy': 'en-US-JennyNeural',
+  'en_gb-alan-medium': 'en-GB-RyanNeural',
+  'alan': 'en-GB-RyanNeural',
+};
+
+function resolveTtsVoice(voice) {
+  if (!voice || typeof voice !== 'string') return 'en-US-JennyNeural';
+  let clean = voice.trim();
+  if (clean.toLowerCase().startsWith('set ')) clean = clean.substring(4).trim();
+  if (clean.toLowerCase().startsWith('to ')) clean = clean.substring(3).trim();
+  clean = clean.replace(/^[.\s]+|[.\s]+$/g, '');
+  if (!clean || clean.toLowerCase() === 'set') return 'en-US-JennyNeural';
+
+  const low = clean.toLowerCase();
+  if (CANONICAL_EDGE_VOICES[low]) {
+    return CANONICAL_EDGE_VOICES[low];
+  }
+
+  // Exact or partial match in canonical dictionary
+  for (const [key, canonical] of Object.entries(CANONICAL_EDGE_VOICES)) {
+    if (low === key || (key.length > 3 && (low.includes(key) || key.includes(low)))) {
+      return canonical;
+    }
+  }
+
+  // Standard Edge TTS format (e.g. en-US-JennyNeural)
+  if (clean.includes('-')) {
+    return normalizeEdgeVoiceName(clean);
+  }
+
+  return 'en-US-JennyNeural';
+}
+
 function normalizeEdgeVoiceName(voice) {
   if (!voice) return 'en-US-JennyNeural';
   
@@ -1908,10 +2046,9 @@ function sanitizeTextForTTS(text) {
   return clean.trim();
 }
 
-async function generateEdgeTTSAudio(cleanText, voiceName) {
-  // 1. Primary engine: Pure Node.js WebSocket Edge TTS (zero external binary dependencies)
+async function synthesizeWithMsEdgeTTS(cleanText, voiceName) {
+  const tts = new MsEdgeTTS();
   try {
-    const tts = new MsEdgeTTS();
     await tts.setMetadata(voiceName, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
     const { audioStream } = tts.toStream(cleanText);
 
@@ -1919,7 +2056,7 @@ async function generateEdgeTTSAudio(cleanText, voiceName) {
       const chunks = [];
       const timeout = setTimeout(() => {
         try { tts.close(); } catch (e) {}
-        reject(new Error('Edge TTS generation timed out after 15 seconds'));
+        reject(new Error(`Edge TTS generation timed out after 15 seconds for voice ${voiceName}`));
       }, 15000);
 
       audioStream.on('data', (chunk) => chunks.push(chunk));
@@ -1939,20 +2076,42 @@ async function generateEdgeTTSAudio(cleanText, voiceName) {
         reject(err);
       });
     });
+  } catch (err) {
+    try { tts.close(); } catch (e) {}
+    throw err;
+  }
+}
+
+async function generateEdgeTTSAudio(cleanText, voiceName) {
+  const targetVoice = resolveTtsVoice(voiceName);
+
+  // 1. Primary engine: Pure Node.js WebSocket Edge TTS with target voice
+  try {
+    return await synthesizeWithMsEdgeTTS(cleanText, targetVoice);
   } catch (primaryErr) {
     const is403 = primaryErr?.message?.includes('403') || primaryErr?.message?.includes('Sec-MS-GEC');
     if (is403) {
-      logger.warn('[Edge TTS] Microsoft Edge neural TTS is currently blocked (403 / Sec-MS-GEC). Falling back to CLI or browser speech synthesis. Try upgrading edge-tts (`pip install --upgrade edge-tts`) or checking network connectivity.');
+      logger.warn('[Edge TTS] Microsoft Edge neural TTS is currently blocked (403 / Sec-MS-GEC). Checking fallback...');
     } else {
-      logger.warn(`[Edge TTS] Node WebSocket engine failed (${primaryErr.message}). Checking CLI fallback...`);
+      logger.warn(`[Edge TTS] Node WebSocket engine failed for "${targetVoice}" (${primaryErr.message}).`);
+    }
+
+    // 2. Resilient fallback: Try default JennyNeural if target was a different voice
+    if (targetVoice !== 'en-US-JennyNeural') {
+      try {
+        logger.info('[Edge TTS] Attempting resilient fallback to standard en-US-JennyNeural...');
+        return await synthesizeWithMsEdgeTTS(cleanText, 'en-US-JennyNeural');
+      } catch (fallbackErr) {
+        logger.warn(`[Edge TTS] Fallback to JennyNeural failed (${fallbackErr.message}). Checking CLI fallback...`);
+      }
     }
     
-    // 2. Secondary fallback: edge-tts CLI tool (if installed on local machine)
+    // 3. Secondary fallback: edge-tts CLI tool (if installed on local machine)
     const tempFile = path.join(__dirname, `tts_temp_${Date.now()}_${Math.floor(Math.random() * 1000)}.mp3`);
     try {
       await new Promise((resolve, reject) => {
         const child = spawn('edge-tts', [
-          '--voice', voiceName,
+          '--voice', targetVoice,
           '--text', cleanText,
           '--write-media', tempFile
         ]);
@@ -2007,18 +2166,15 @@ app.post('/api/tts', async (req, res) => {
   }
 
   const reqVoice = req.body.voice;
-  if (reqVoice && reqVoice.includes('-') && !reqVoice.includes('_')) {
+  if (reqVoice && typeof reqVoice === 'string') {
     voiceName = reqVoice;
   }
 
-  // Normalize voice name to correct case if it is an Edge voice
-  if (voiceName && voiceName.includes('-') && !voiceName.includes('_')) {
-    voiceName = normalizeEdgeVoiceName(voiceName);
-  }
+  const resolvedVoice = resolveTtsVoice(voiceName);
 
   try {
-    console.log(`[Edge TTS] Generating speech using edge-tts (${voiceName}) for text: "${cleanText.substring(0, 40)}..."`);
-    const audioBuffer = await generateEdgeTTSAudio(cleanText, voiceName);
+    console.log(`[Edge TTS] Generating speech using edge-tts (${resolvedVoice}) for text: "${cleanText.substring(0, 40)}..."`);
+    const audioBuffer = await generateEdgeTTSAudio(cleanText, resolvedVoice);
     res.set('Content-Type', 'audio/mpeg');
     res.send(audioBuffer);
   } catch (error) {

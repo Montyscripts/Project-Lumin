@@ -24,9 +24,13 @@ export const AVAILABLE_VOICE_GROUPS = [
       { id: 'en-US-AriaNeural', label: 'Aria (US Female)' },
       { id: 'en-US-DavisNeural', label: 'Davis (US Male)' },
       { id: 'en-US-AmberNeural', label: 'Amber (US Female)' },
+      { id: 'en-US-AnaNeural', label: 'Ana (US Female)' },
+      { id: 'en-US-AndrewNeural', label: 'Andrew (US Male)' },
       { id: 'en-US-ChristopherNeural', label: 'Christopher (US Male)' },
       { id: 'en-US-EricNeural', label: 'Eric (US Male)' },
       { id: 'en-US-MichelleNeural', label: 'Michelle (US Female)' },
+      { id: 'en-US-RogerNeural', label: 'Roger (US Male)' },
+      { id: 'en-US-SteffanNeural', label: 'Steffan (US Male)' },
     ]
   },
   {
@@ -34,18 +38,26 @@ export const AVAILABLE_VOICE_GROUPS = [
     voices: [
       { id: 'en-GB-SoniaNeural', label: 'Sonia (UK Female)' },
       { id: 'en-GB-RyanNeural', label: 'Ryan (UK Male)' },
+      { id: 'en-GB-LibbyNeural', label: 'Libby (UK Female)' },
+      { id: 'en-GB-ThomasNeural', label: 'Thomas (UK Male)' },
       { id: 'en-AU-NatashaNeural', label: 'Natasha (AU Female)' },
+      { id: 'en-AU-WilliamNeural', label: 'William (AU Male)' },
       { id: 'en-CA-ClaraNeural', label: 'Clara (CA Female)' },
+      { id: 'en-CA-LiamNeural', label: 'Liam (CA Male)' },
       { id: 'en-IE-EmilyNeural', label: 'Emily (IE Female)' },
       { id: 'en-IN-NeerjaNeural', label: 'Neerja (IN Female)' },
+      { id: 'en-IN-PrabhatNeural', label: 'Prabhat (IN Male)' },
     ]
   },
   {
     label: 'Multilingual Neural',
     voices: [
       { id: 'es-ES-ElviraNeural', label: 'Elvira (Spanish)' },
+      { id: 'es-MX-DaliaNeural', label: 'Dalia (Mexican Spanish)' },
       { id: 'fr-FR-DeniseNeural', label: 'Denise (French)' },
+      { id: 'fr-FR-HenriNeural', label: 'Henri (French Male)' },
       { id: 'de-DE-KatjaNeural', label: 'Katja (German)' },
+      { id: 'de-DE-KillianNeural', label: 'Killian (German Male)' },
       { id: 'ja-JP-NanamiNeural', label: 'Nanami (Japanese)' },
       { id: 'zh-CN-XiaoxiaoNeural', label: 'Xiaoxiao (Chinese)' },
       { id: 'it-IT-ElsaNeural', label: 'Elsa (Italian)' },
@@ -1027,13 +1039,25 @@ export class LuminStatusBar extends LitElement {
                 aria-label="Select Voice Synthesis Model"
                 .value=${this.piperVoice}
                 @change=${(e: Event) => {
-                  const val = (e.target as HTMLSelectElement).value;
+                  let val = (e.target as HTMLSelectElement).value;
                   if (val) {
+                    if (val.toLowerCase().startsWith('set ')) val = val.substring(4).trim();
+                    if (val.toLowerCase().startsWith('to ')) val = val.substring(3).trim();
+                    if (!val || val.toLowerCase() === 'set') val = 'en-US-JennyNeural';
                     this.piperVoice = val;
-                    try {
-                      localStorage.setItem('project_lumin_piper_voice', val);
-                    } catch (err) {}
                     soundFX.playClick();
+                    const host = ((this.getRootNode() as ShadowRoot)?.host as any) || (document.querySelector('lumin-app') as any);
+                    if (host && typeof host.setTtsVoice === 'function') {
+                      host.setTtsVoice(val);
+                    } else {
+                      try {
+                        localStorage.setItem('project_lumin_piper_voice', val);
+                      } catch (err) {}
+                      if (host) {
+                        host.piperVoice = val;
+                        host.requestUpdate?.();
+                      }
+                    }
                     this.dispatchEvent(new CustomEvent('voice-change', {
                       detail: { voice: val },
                       bubbles: true,

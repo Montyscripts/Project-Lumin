@@ -204,7 +204,15 @@ export class GdmLiveAudio extends LitElement {
   @state() private activeModelReason = '';
   @state() private ollamaModel = 'llama3';
   @state() private unrestrictedMode = localStorage.getItem('project_lumin_unrestricted_mode') === 'true';
-  @state() private piperVoice = localStorage.getItem('project_lumin_piper_voice') || 'en-US-JennyNeural';
+  @state() private piperVoice = (() => {
+    try {
+      const v = localStorage.getItem('project_lumin_piper_voice');
+      if (!v || v.trim().toLowerCase() === 'set' || v.trim().toLowerCase().startsWith('set ')) return 'en-US-JennyNeural';
+      return v.trim();
+    } catch (e) {
+      return 'en-US-JennyNeural';
+    }
+  })();
   @state() private ttsMode: 'full' | 'short' | 'off' = (localStorage.getItem('project_lumin_tts_mode') as any) || 'full';
   @state() private llmCommandTemplate = 'ollama run {model} "{prompt}"';
   @state() private isMcpEnabled = false;
@@ -6432,13 +6440,26 @@ export class GdmLiveAudio extends LitElement {
       }, 7000);
     }
 
-    // Fetch initial agent config to synchronize unrestricted_mode
+    // Fetch initial agent config to synchronize unrestricted_mode and tts_voice
     fetch('/api/config')
       .then(res => res.json())
       .then(data => {
-        if (data && data.config && typeof data.config.unrestricted_mode === 'boolean') {
-          this.unrestrictedMode = data.config.unrestricted_mode;
-          localStorage.setItem('project_lumin_unrestricted_mode', String(data.config.unrestricted_mode));
+        if (data && data.config) {
+          if (typeof data.config.unrestricted_mode === 'boolean') {
+            this.unrestrictedMode = data.config.unrestricted_mode;
+            localStorage.setItem('project_lumin_unrestricted_mode', String(data.config.unrestricted_mode));
+          }
+          if (data.config.tts_voice && typeof data.config.tts_voice === 'string') {
+            let serverVoice = data.config.tts_voice.trim();
+            if (serverVoice.toLowerCase().startsWith('set ')) serverVoice = serverVoice.substring(4).trim();
+            if (serverVoice.toLowerCase().startsWith('to ')) serverVoice = serverVoice.substring(3).trim();
+            if (serverVoice && serverVoice.toLowerCase() !== 'set') {
+              this.piperVoice = serverVoice;
+              try {
+                localStorage.setItem('project_lumin_piper_voice', serverVoice);
+              } catch (e) {}
+            }
+          }
           this.requestUpdate();
         }
       })
@@ -6868,10 +6889,16 @@ export class GdmLiveAudio extends LitElement {
                   this.taskProgress = null;
                   
                   // Check for voice change and update local state
-                  const voiceMatch = displayResponseText.match(/Successfully switched default speech synthesis voice to:\s*([a-zA-Z0-9_-]+)/i);
+                  const voiceMatch = displayResponseText.match(/Successfully switched default speech synthesis voice to:\s*(?:set\s+)?([a-zA-Z0-9_-]+)/i);
                   if (voiceMatch && voiceMatch[1]) {
-                    this.piperVoice = voiceMatch[1].trim();
-                    console.log('Client updated piperVoice to:', this.piperVoice);
+                    const matchedVoice = voiceMatch[1].trim();
+                    if (matchedVoice && matchedVoice.toLowerCase() !== 'set') {
+                      this.piperVoice = matchedVoice;
+                      try {
+                        localStorage.setItem('project_lumin_piper_voice', matchedVoice);
+                      } catch (err) {}
+                      console.log('Client updated piperVoice to:', this.piperVoice);
+                    }
                   }
 
                   const aiMessage: TranscriptionEntry = {
@@ -9318,10 +9345,15 @@ export class GdmLiveAudio extends LitElement {
         return;
       }
       
+      let selectedVoice = (voiceName || this.piperVoice || 'en-US-JennyNeural').trim();
+      if (selectedVoice.toLowerCase().startsWith('set ')) selectedVoice = selectedVoice.substring(4).trim();
+      if (selectedVoice.toLowerCase().startsWith('to ')) selectedVoice = selectedVoice.substring(3).trim();
+      if (!selectedVoice || selectedVoice.toLowerCase() === 'set') selectedVoice = 'en-US-JennyNeural';
+
       const ttsRes = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: cleanText, voice: voiceName || this.piperVoice })
+        body: JSON.stringify({ text: cleanText, voice: selectedVoice })
       });
       if (!ttsRes.ok) throw new Error(await ttsRes.text());
       const arrayBuffer = await ttsRes.arrayBuffer();
@@ -11701,6 +11733,40 @@ Available Effects:
     this.requestUpdate();
   }
 
+  public async setTtsVoice(val: string) {
+    if (!val) return;
+    let clean = val.trim();
+    if (clean.toLowerCase().startsWith('set ')) clean = clean.substring(4).trim();
+    if (clean.toLowerCase().startsWith('to ')) clean = clean.substring(3).trim();
+    if (!clean || clean.toLowerCase() === 'set') clean = 'en-US-JennyNeural';
+
+    this.piperVoice = clean;
+    try {
+      localStorage.setItem('project_lumin_piper_voice', clean);
+    } catch (e) {}
+
+    try {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tts_voice: clean })
+      });
+    } catch (e) {
+      console.warn('Failed to sync tts_voice to backend config:', e);
+    }
+
+    if (this.wsTerminal && this.wsTerminal.readyState === WebSocket.OPEN) {
+      try {
+        this.wsTerminal.send(JSON.stringify({
+          type: 'config',
+          voice: clean
+        }));
+      } catch (e) {}
+    }
+
+    this.requestUpdate();
+  }
+
   private async triggerLuminEasterEgg() {
     this.isLuminEasterEggActive = true;
     const isUnlocking = !this.unrestrictedMode;
@@ -12662,14 +12728,7 @@ Available Effects:
             @voice-change=${(e: CustomEvent) => {
               const newVoice = e.detail?.voice;
               if (newVoice) {
-                this.piperVoice = newVoice;
-                try {
-                  localStorage.setItem('project_lumin_piper_voice', newVoice);
-                } catch (err) {}
-                if (this.wsTerminal && this.wsTerminal.readyState === WebSocket.OPEN) {
-                  this.wsTerminal.send(JSON.stringify({ type: 'config', voice: newVoice }));
-                }
-                this.requestUpdate();
+                this.setTtsVoice(newVoice);
               }
             }}
             @cancel-active-task=${() => this.cancelActiveTask()}

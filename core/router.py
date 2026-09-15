@@ -889,7 +889,14 @@ class IntentRouter:
         if low.startswith("tts ") or low == "tts":
             return self.agent._handle_meta_command(cleaned)
 
-        if low.startswith("voice ") or low in ("voice list", "list voices", "show voices"):
+        if (
+            low.startswith("voice ")
+            or low.startswith("set voice ")
+            or low.startswith("change voice ")
+            or low.startswith("switch voice ")
+            or low in ("voice list", "list voices", "show voices")
+            or re.search(r'\b(?:change|switch|set)\s+(?:tts\s+)?voice\b', low)
+        ):
             return self.agent._handle_meta_command(cleaned)
 
         # 5. System Prompt & Memory commands
