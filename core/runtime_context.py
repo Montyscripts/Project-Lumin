@@ -93,6 +93,22 @@ class RuntimeContextManager:
         """Returns current date formatted clearly (e.g., 'July 31, 2026')."""
         return datetime.datetime.now().strftime("%B %d, %Y")
 
+    def get_current_date_full(self) -> str:
+        """Returns current date formatted with day of week (e.g., 'Tuesday, September 15, 2026')."""
+        return datetime.datetime.now().strftime("%A, %B %d, %Y")
+
+    def get_current_utc_date(self) -> str:
+        """Returns current UTC date formatted clearly (e.g., 'Tuesday, September 15, 2026')."""
+        return datetime.datetime.now(datetime.timezone.utc).strftime("%A, %B %d, %Y")
+
+    def get_current_date_iso(self) -> str:
+        """Returns current local date in ISO format (YYYY-MM-DD)."""
+        return datetime.datetime.now().strftime("%Y-%m-%d")
+
+    def get_current_utc_date_iso(self) -> str:
+        """Returns current UTC date in ISO format (YYYY-MM-DD)."""
+        return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+
     def get_current_time(self) -> str:
         """Returns current time formatted clearly (e.g., '03:27:48 PM')."""
         now = datetime.datetime.now()
@@ -151,6 +167,10 @@ class RuntimeContextManager:
     def build_context_dict(self, active_model: Optional[str] = None) -> Dict[str, str]:
         """Builds a complete key-value dictionary of runtime context variables."""
         date_val = self.get_current_date()
+        date_full = self.get_current_date_full()
+        date_utc = self.get_current_utc_date()
+        date_iso = self.get_current_date_iso()
+        date_utc_iso = self.get_current_utc_date_iso()
         time_val = self.get_current_time()
         os_val = self.get_operating_system()
         model_val = self.get_active_model(active_model)
@@ -161,6 +181,15 @@ class RuntimeContextManager:
             "current_date": date_val,
             "date": date_val,
             "today_date": date_val,
+            "today_full_date": date_full,
+            "current_local_date": date_full,
+            "local_date": date_full,
+            "utc_date": date_utc,
+            "current_utc_date": date_utc,
+            "iso_date": date_iso,
+            "local_iso_date": date_iso,
+            "utc_iso_date": date_utc_iso,
+            "today_statement": f"Today's date is {date_full}",
             "current_time": time_val,
             "time": time_val,
             "operating_system": os_val,
@@ -247,6 +276,9 @@ class RuntimeContextManager:
         ctx = self.build_context_dict(active_model)
         block = (
             "### RUNTIME ENVIRONMENT CONTEXT ###\n"
+            f"Today's date is {ctx['today_full_date']}.\n"
+            f"- Current Local Date: {ctx['today_full_date']} (ISO: {ctx['local_iso_date']})\n"
+            f"- Current UTC Date: {ctx['utc_date']} (ISO: {ctx['utc_iso_date']})\n"
             f"- Current Date: {ctx['current_date']}\n"
             f"- Current Time: {ctx['current_time']}\n"
             f"- Operating System: {ctx['operating_system']}\n"

@@ -283,7 +283,31 @@ def assemble_effective_system_prompt(
             active_model=target_model
         )
     else:
-        resolved_sys = base_prompt
+        # Fallback to automatic runtime context injection so current date is always present
+        try:
+            from core.runtime_context import RuntimeContextManager
+            rcm = RuntimeContextManager()
+            resolved_sys, _ = rcm.inject_context(
+                system_prompt=base_prompt,
+                active_model=target_model
+            )
+        except Exception:
+            now_local = datetime.datetime.now()
+            now_utc = datetime.datetime.now(datetime.timezone.utc)
+            date_full = now_local.strftime("%A, %B %d, %Y")
+            iso_local = now_local.strftime("%Y-%m-%d")
+            utc_full = now_utc.strftime("%A, %B %d, %Y")
+            utc_iso = now_utc.strftime("%Y-%m-%d")
+            resolved_sys = (
+                f"{base_prompt}\n\n"
+                f"### RUNTIME ENVIRONMENT CONTEXT ###\n"
+                f"Today's date is {date_full}.\n"
+                f"- Current Local Date: {date_full} (ISO: {iso_local})\n"
+                f"- Current UTC Date: {utc_full} (ISO: {utc_iso})\n"
+                f"- Current Date: {now_local.strftime('%B %d, %Y')}\n"
+                f"- Current Time: {now_local.strftime('%I:%M:%S %p')}\n"
+                f"==================================="
+            )
 
     if resource_governor and hasattr(resource_governor, "get_governance_report"):
         gov_report = resource_governor.get_governance_report()

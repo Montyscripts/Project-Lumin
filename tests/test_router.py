@@ -437,5 +437,18 @@ class TestIntentRouter(unittest.TestCase):
             if orig_research:
                 self.agent.writing_generator.gather_web_research_context = orig_research
 
+    def test_temporal_historical_routing(self):
+        """Tests that on-this-day and temporal queries route to browser/research tasks."""
+        queries = [
+            "Go throughout time and find a historical event that’s significant to today’s date",
+            "What important historical event happened on this day?",
+            "Tell me something significant that happened on today’s date in history",
+            "What happened on this day in history?",
+        ]
+        for q in queries:
+            self.assertTrue(self.router.is_temporal_historical_query(q))
+            intent, _ = self.router.classify(q)
+            self.assertEqual(intent, IntentType.BROWSER_TASK)
+
 if __name__ == "__main__":
     unittest.main()

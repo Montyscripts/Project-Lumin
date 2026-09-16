@@ -704,7 +704,61 @@ class IntentRouter:
             return True
         return False
 
+    def _is_temporal_historical_query(self, low: str, raw: str = "") -> bool:
+        """
+        Detects open-ended temporal, on-this-day, and historical research queries such as:
+        - 'Go throughout time and find a historical event that’s significant to today’s date'
+        - 'What important historical event happened on this day?'
+        - 'Tell me something significant that happened on today’s date in history'
+        - 'What happened on this day in history?'
+        - 'Historical event significant to today'
+        """
+        if not low:
+            return False
+        clean = low.strip().lower()
+
+        # Direct simple date/time requests are answered by runtime context, not research
+        if re.search(r"^(?:what(?:'s|\s+is)\s+(?:today(?:'s)?\s+)?(?:the\s+)?date|current\s+date|today(?:'s)?\s+date|what\s+date\s+is\s+it)\b", clean):
+            return False
+
+        # 1. Direct explicit phrases
+        explicit_phrases = (
+            "this day in history", "today in history", "on this day in history",
+            "happened on this day", "happened today in history", "happened on today's date",
+            "happened on today", "occurred on this day", "occurred today in history",
+            "occurred on today's date", "took place on this day", "took place today in history",
+            "significant to today's date", "significant to today", "significant event on this day",
+            "historical event on this day", "historical event that happened today",
+            "moment in history today", "what happened on this day", "what happened today in history"
+        )
+        if any(p in clean for p in explicit_phrases):
+            return True
+
+        # 2. Combinations of historical/time cues + date/today anchor + event/fact request
+        has_history_word = any(h in clean for h in ("historical", "history", "throughout time", "through time", "in history", "milestone in history", "moment in history"))
+        has_temporal_anchor = any(t in clean for t in ("today", "this day", "current date", "today's date", "on this date", "significant to today", "throughout time"))
+        has_event_word = any(e in clean for e in ("event", "events", "happened", "occurred", "took place", "significant", "significance", "famous", "milestone", "fact", "facts", "find", "tell me"))
+
+        if has_history_word and has_temporal_anchor and has_event_word:
+            return True
+
+        # 3. "go throughout time and find" or similar exploratory history requests
+        if ("throughout time" in clean or "through time" in clean or "back in time" in clean) and (has_event_word or "history" in clean or "event" in clean):
+            return True
+
+        # 4. Regex for queries like "what [important/significant] [historical] event ... today/this day"
+        if re.search(r"\b(?:what|tell\s+me|find|give\s+me|show)\b.*\b(?:event|happened|occurred)\b.*\b(?:today|this\s+day|today's\s+date)\b", clean):
+            return True
+
+        return False
+
+    def is_temporal_historical_query(self, query: str) -> bool:
+        """Public helper to identify temporal/historical research queries."""
+        return self._is_temporal_historical_query((query or "").lower(), query)
+
     def _is_browser_task(self, low: str, raw: str) -> bool:
+        if self._is_temporal_historical_query(low, raw):
+            return True
         if any(kw in low for kw in ("youtube", "amazon", "ebay", "bestbuy", "expedia", "walmart", "target", "github", "reddit", "tab", "tabs", "browser", "website", "web page", "scrape")):
             return True
         if re.search(r"(?:reddit\.com/r/|/r/|r/)([A-Za-z0-9_]+)", low):

@@ -712,6 +712,10 @@ class LuminAgent:
         if any(kw in low for kw in doc_analysis_phrases) or (has_doc_ext and any(w in low for w in ("summarize", "analyze", "read", "explain", "compare", "what", "overview", "file", "document", "archive", "contents"))) or (has_session_uploads and (any(term in low for term in spreadsheet_doc_terms) or any(w in low for w in ("archive", "documents", "document", "files", "file", "text", "inside", "contents", "say", "says", "list", "show", "who", "which", "how many", "count", "average", "total", "highest", "lowest", "filter")))):
             return "document_analysis"  # note: conversation-summary already filtered earlier
 
+        # Check temporal & historical research queries before sensitive/uncensored keyword substring matching
+        if self._is_temporal_historical_query(low, query):
+            return "research"
+
         # Check UNCENSORED & Sensitive / Avoided / Edgy topics AFTER explicit code and document checks
         if any(kw in low for kw in UNCENSORED_KEYWORDS):
             return "uncensored_writing"
@@ -726,6 +730,7 @@ class LuminAgent:
             return "writing"
         if any(w in low for w in ("calculate", "solve", "math", "equation", "sum")):
             return "math"
+            
         if any(w in low for w in ("search", "find", "research", "look up", "weather", "temperature", "forecast")):
             return "research"
         if any(w in low for w in ("plan", "itinerary", "schedule", "trip")):
@@ -2269,6 +2274,9 @@ class LuminAgent:
             return "\n".join(_tool_result_to_display(res) for res in outputs)
 
         # 3. Dynamic Runtime Context Queries (Date, Time, Model, Capabilities, Session)
+        if self._is_temporal_historical_query(low, query):
+            return self._handle_temporal_historical_research_query(query, getattr(self, "active_model", "llama3.2:3b"))
+
         if re.search(r"\b(what('s|\s+is)\s+(today('s)?\s+)?(the\s+)?date|current\s+date|today('s)?\s+date|what\s+date\s+is\s+it)\b", low):
             return f"Today's date is {self.runtime_context_manager.get_current_date()}."
 
@@ -3943,11 +3951,235 @@ class LuminAgent:
         out.append("- **System Status**: Fully operational, local-first, production-verified.")
         return "\n".join(out)
 
+    def _is_temporal_historical_query(self, low: str, raw: str = "") -> bool:
+        """
+        Detects open-ended temporal, on-this-day, and historical research queries such as:
+        - 'Go throughout time and find a historical event that’s significant to today’s date'
+        - 'What important historical event happened on this day?'
+        - 'Tell me something significant that happened on today’s date in history'
+        - 'What happened on this day in history?'
+        - 'Historical event significant to today'
+        """
+        if hasattr(self, "intent_router") and hasattr(self.intent_router, "_is_temporal_historical_query"):
+            return self.intent_router._is_temporal_historical_query(low, raw)
+        clean = (low or "").strip().lower()
+        if re.search(r"^(?:what(?:'s|\s+is)\s+(?:today(?:'s)?\s+)?(?:the\s+)?date|current\s+date|today(?:'s)?\s+date|what\s+date\s+is\s+it)\b", clean):
+            return False
+        explicit_phrases = (
+            "this day in history", "today in history", "on this day in history",
+            "happened on this day", "happened today in history", "happened on today's date",
+            "happened on today", "occurred on this day", "occurred today in history",
+            "occurred on today's date", "took place on this day", "took place today in history",
+            "significant to today's date", "significant to today", "significant event on this day",
+            "historical event on this day", "historical event that happened today",
+            "moment in history today", "what happened on this day", "what happened today in history"
+        )
+        if any(p in clean for p in explicit_phrases):
+            return True
+        has_history_word = any(h in clean for h in ("historical", "history", "throughout time", "through time", "in history", "milestone in history", "moment in history"))
+        has_temporal_anchor = any(t in clean for t in ("today", "this day", "current date", "today's date", "on this date", "significant to today", "throughout time"))
+        has_event_word = any(e in clean for e in ("event", "events", "happened", "occurred", "took place", "significant", "significance", "famous", "milestone", "fact", "facts", "find", "tell me"))
+        if has_history_word and has_temporal_anchor and has_event_word:
+            return True
+        if ("throughout time" in clean or "through time" in clean or "back in time" in clean) and (has_event_word or "history" in clean or "event" in clean):
+            return True
+        if re.search(r"\b(?:what|tell\s+me|find|give\s+me|show)\b.*\b(?:event|happened|occurred)\b.*\b(?:today|this\s+day|today's\s+date)\b", clean):
+            return True
+        return False
+
+    def _handle_temporal_historical_research_query(self, query: str, active_model: str) -> str:
+        """
+        Executes grounded research for temporal / on-this-day / historical event queries.
+        Ensures accurate current date context is used, grounds findings via web search,
+        and provides robust fallback if models are offline or search is unavailable.
+        """
+        now_local = datetime.datetime.now()
+        if hasattr(self, "runtime_context_manager") and self.runtime_context_manager:
+            full_date = self.runtime_context_manager.get_current_date_full()
+            date_val = self.runtime_context_manager.get_current_date()
+        else:
+            full_date = now_local.strftime("%A, %B %d, %Y")
+            date_val = now_local.strftime("%B %d, %Y")
+
+        month_day = now_local.strftime("%B %d")
+
+        # Check if user explicitly mentioned a specific date (e.g. "July 4" or "March 15")
+        months_pattern = r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})\b"
+        m_match = re.search(months_pattern, query, re.IGNORECASE)
+        if m_match:
+            target_month = m_match.group(1).capitalize()
+            target_day = int(m_match.group(2))
+            target_date_label = f"{target_month} {target_day}"
+        else:
+            target_date_label = month_day
+
+        search_query = f"On this day in history {target_date_label} historical events"
+        print(f">>> [TEMPORAL RESEARCH]: Executing grounded search for date '{target_date_label}' (Query: '{search_query}')...")
+        flush_stdout()
+
+        succeeded_text = ""
+        has_snippets = False
+        try:
+            search_result = self.tool_registry.execute_tool("web_search", search_query)
+            search_status = getattr(search_result, "status", "failed")
+            succeeded_text = getattr(search_result, "succeeded", "") or getattr(search_result, "output", "") or ""
+            has_snippets = bool(search_status == "success" and succeeded_text and "Retrieved" in succeeded_text)
+        except Exception as e:
+            logger.warning(f"Web search tool execution failed for temporal research: {e}")
+            has_snippets = False
+
+        # Determine if target LLM is available and installed
+        is_model_available = False
+        target_model = active_model or getattr(self, "force_model", None) or getattr(self, "active_model", None) or "llama3.2:3b"
+        if hasattr(self, "local_models") and self.local_models and target_model in self.local_models:
+            is_model_available = True
+        elif hasattr(self, "_fetch_local_models"):
+            try:
+                mods = self._fetch_local_models()
+                if mods and target_model in mods:
+                    is_model_available = True
+            except Exception:
+                is_model_available = False
+
+        # Case 1: Web search succeeded with snippets
+        if has_snippets:
+            if is_model_available:
+                grounded_prompt = (
+                    f"User Request: {query}\n"
+                    f"Current Date: Today's date is {full_date}.\n\n"
+                    f"[RETRIEVED REAL-TIME SEARCH RESULTS FOR {target_date_label}]:\n"
+                    f"{succeeded_text}\n\n"
+                    f"FACTUAL GROUNDING INSTRUCTIONS:\n"
+                    f"1. Select at least one significant historical event that occurred on this day ({target_date_label}) in history from the retrieved search records above.\n"
+                    f"2. Explicitly state the exact YEAR (e.g. 1821, 1963, 1916), describe what happened, and explain why this event is historically significant.\n"
+                    f"3. Frame your answer clearly, stating today's date ({full_date}) at the outset.\n"
+                    f"4. Do NOT hallucinate dates or events. Strictly ground your answer in verified history and the retrieved records above.\n"
+                )
+                effective_system = (
+                    f"{self._get_effective_system_prompt()}\n\n"
+                    "=== HISTORICAL RESEARCH ENGINE ===\n"
+                    f"Today's date is {full_date}. You are an authoritative historical research assistant. "
+                    "Always provide the exact year, event details, and significance grounded in the retrieved records."
+                )
+                try:
+                    model_synth = self.ollama_client.generate_content(
+                        prompt=grounded_prompt,
+                        system_instruction=effective_system,
+                        model=target_model
+                    )
+                    if model_synth and len(model_synth.strip()) > 30:
+                        return self._clean_response_text(model_synth.strip())
+                except Exception as e:
+                    logger.warning(f"Temporal research model synthesis failed: {e}")
+
+            # Fallback if model is offline/uninstalled: format retrieved search records directly
+            events_summary = []
+            for block in succeeded_text.split("• **Title**:"):
+                block = block.strip()
+                if not block:
+                    continue
+                title_match = re.search(r"^([^\n]+)", block)
+                title = title_match.group(1).strip() if title_match else ""
+                snippet_match = re.search(r"\*\*Snippet\*\*:\s*([^\n]+)", block)
+                snippet = snippet_match.group(1).strip() if snippet_match else ""
+                if snippet:
+                    events_summary.append(f"- **{title}**: {snippet}")
+                elif title:
+                    events_summary.append(f"- **{title}**")
+
+            if events_summary:
+                body = "\n".join(events_summary[:4])
+            else:
+                body = succeeded_text.replace("Retrieved", "Historical Records for").strip()
+
+            return (
+                f"Today's date is **{full_date}**.\n\n"
+                f"### 📜 Significant Historical Events on This Day ({target_date_label})\n\n"
+                f"{body}\n\n"
+                f"*Grounded via live web search records.*"
+            )
+
+        # Case 2: Web search unavailable or returned no snippets
+        if is_model_available:
+            offline_prompt = (
+                f"User Request: {query}\n"
+                f"Current Date: Today's date is {full_date}.\n\n"
+                f"NOTE: Live real-time web search was not available for this query.\n"
+                f"Using verified historical knowledge, identify a significant historical event that occurred on {target_date_label} in history.\n"
+                f"Include the exact year, describe what happened, and explain why it is historically significant.\n"
+                f"Be honest and note clearly that live web search was not used."
+            )
+            effective_system = (
+                f"{self._get_effective_system_prompt()}\n\n"
+                "=== HISTORICAL RESEARCH ENGINE ===\n"
+                f"Today's date is {full_date}."
+            )
+            try:
+                model_synth = self.ollama_client.generate_content(
+                    prompt=offline_prompt,
+                    system_instruction=effective_system,
+                    model=target_model
+                )
+                if model_synth and len(model_synth.strip()) > 30:
+                    return self._clean_response_text(model_synth.strip())
+            except Exception as e:
+                logger.warning(f"Offline historical knowledge generation failed: {e}")
+
+        # Case 3: Both web search and models are unavailable / offline
+        historical_milestones = {
+            "September 15": (
+                "- **1821**: Costa Rica, El Salvador, Guatemala, Honduras, and Nicaragua formally declared independence from the Spanish Empire.\n"
+                "- **1916**: During World War I, tanks were used for the first time in military combat at the Battle of the Somme (the British Mark I tank).\n"
+                "- **1963**: The 16th Street Baptist Church bombing took place in Birmingham, Alabama, marking a pivotal turning point in the American Civil Rights Movement."
+            ),
+            "July 4": (
+                "- **1776**: The United States Second Continental Congress adopted the Declaration of Independence, severing ties with the Kingdom of Great Britain."
+            ),
+            "January 1": (
+                "- **1863**: President Abraham Lincoln issued the Emancipation Proclamation, declaring all enslaved persons in Confederate territory free."
+            ),
+            "December 7": (
+                "- **1941**: The attack on Pearl Harbor occurred, leading directly to the entry of the United States into World War II."
+            ),
+            "October 24": (
+                "- **1945**: The United Nations Charter officially came into force following ratification by the five permanent members of the Security Council."
+            ),
+            "July 20": (
+                "- **1969**: Apollo 11 astronauts Neil Armstrong and Buzz Aldrin became the first humans to land on the Moon."
+            ),
+            "November 9": (
+                "- **1989**: The Berlin Wall fell, symbolizing the collapse of the Iron Curtain and the impending conclusion of the Cold War."
+            ),
+            "June 6": (
+                "- **1944**: Allied forces launched Operation Overlord (D-Day), landing on the beaches of Normandy in the largest amphibious invasion in history."
+            )
+        }
+
+        if target_date_label in historical_milestones:
+            events_text = historical_milestones[target_date_label]
+            return (
+                f"Today's date is **{full_date}**.\n\n"
+                f"*(Note: Live web search is currently unavailable; the following events are from verified historical records.)*\n\n"
+                f"### 📜 Significant Historical Events on {target_date_label}\n\n"
+                f"{events_text}\n\n"
+                f"These landmark events played a significant role in shaping world history."
+            )
+
+        return (
+            f"Today's date is **{full_date}**.\n\n"
+            f"*(Note: Live web search is currently unavailable and local models are offline.)*\n\n"
+            f"Throughout history, {target_date_label} has been marked by pivotal milestones and cultural moments across nations. "
+            f"To retrieve real-time search records, please ensure the web search tool is connected or local models are running."
+        )
+
     def _handle_grounded_research_query(self, query: str, active_model: str) -> str:
         """
         Executes grounded web search retrieval and ensures model output is strictly
         constrained to retrieved search snippets, preventing ungrounded flight/price hallucinations.
         """
+        if self._is_temporal_historical_query(str(query).lower(), str(query)):
+            return self._handle_temporal_historical_research_query(query, active_model)
+
         clean_search_q = str(query)
         clean_search_q = re.sub(r"^(?:please\s+)?(?:flight\s+research|research|search|find|look\s+up)\s+(?:for\s+)?", "", clean_search_q, flags=re.IGNORECASE).strip()
         clean_search_q = clean_search_q.replace("→", " to ").replace("->", " to ").replace("=>", " to ")
@@ -5958,7 +6190,7 @@ class LuminAgent:
             flush_stdout()
 
         # Check for grounded research / flight search intent before model execution
-        is_research_query = (task == "research") or any(kw in low_query for kw in (
+        is_research_query = (task == "research") or self._is_temporal_historical_query(low_query, original_user_query) or any(kw in low_query for kw in (
             "flight research", "research flights", "flight options", "search flights", "find flights",
             "flight from", "flights from", "flight to", "flights to", "tulsa to tokyo", "tulsa -> tokyo",
             "search web", "web search"
