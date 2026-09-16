@@ -23,13 +23,50 @@ It pairs a real-time 3D audio-reactive sphere with voice interaction, local LLM 
 
 > **Current status**: Early prototype. Many features work on the author’s machine. Cross-platform reliability and polish are still limited. This is not a production-ready product. 
 
-[Quick Start](#-quick-start) • [Current Capabilities](#-current-capabilities) • [Interface & Modes](#-workspace-modes) • [Dual MCP Engine](#-model-context-protocol-dual-mcp-engine) • [System Architecture](#-system-architecture) • [Roadmap](#-roadmap--current-status) • [Contributing](CONTRIBUTING.md)
+[Quick Start](#-quick-start) • [Current Capabilities](#-current-capabilities) • [Interface & Modes](#-workspace-modes) • [Dual MCP Engine](#-model-context-protocol-dual-mcp-engine) • [System Architecture](#-system-architecture-the-4-pillars) • [Roadmap](#-roadmap--current-status) • [Contributing](#-contributing--community)
 
 ---
 </div>
 
 <div align="center">
+
+  <p><strong>✨ Inspiration</strong></p>
+  <p>A short Star Trek: Strange New Worlds meme GIF.</p>
   <img src="assets/lumin-demo.gif" alt="LUMIN Demo" width="900">
+
+  <br>
+  <hr>
+  <br>
+
+  <p><strong>🚀 Install</strong></p>
+  <p>Requires Python 3.11–3.13, Node.js 20+, and Ollama (pull a model like <code>llama3.2:3b</code>).<br>
+  From download to running in under a minute once those are installed.</p>
+  <img src="assets/Install - Lumin - Tut.gif" alt="Lumin Install" width="900">
+
+  <br>
+  <hr>
+  <br>
+
+  <p><strong>🎨 Styles</strong></p>
+  <p>Different visual styles and looks of the 3D interface.<br>
+  Feel free to try customizing your own.</p>
+  <img src="assets/Show - Lumin - Styles.gif" alt="Lumin Styles" width="900">
+
+  <br>
+  <hr>
+  <br>
+
+  <p><strong>🎬 1-Min Showcase</strong></p>
+  <p>Live demo of voice + tools in action.</p>
+  <img src="assets/1 min - Showcase - Lumin - Prompts.gif" alt="Lumin 1-Min Showcase" width="900">
+  <p><em>
+  Who are you in one clear sentence?<br>
+  Open Gmail in the browser right now.<br>
+  Open YouTube, search for “Star Trek intro”, then click the first video and play it.<br>
+  Analyze the attached PDF accurately. Respond only as a wise old grandfather explaining it simply.<br>
+  Summarize everything we have talked about in this conversation so far in 4 short bullets.
+  </em></p>
+
 </div>
 
 ## 💡 Why Lumin?
@@ -63,7 +100,7 @@ Most voice assistants rely on continuous cloud telemetry, high-latency API round
 
 ---
 
-## 🖥️ Workspace Modes
+## 💻 Workspace Modes
 
 Lumin provides three primary workspace modes plus an ambient presentation mode:
 
@@ -227,7 +264,7 @@ This part of the system is functional but still early and not fully hardened for
 
 ---
 
-## 🏗️ System Architecture (The 4 Pillars)
+## 🧱 System Architecture (The 4 Pillars)
 
 ```
 Project-Lumin/
@@ -293,7 +330,7 @@ Results vary significantly with model size, quantization, and system load.
 
 ---
 
-## 🗺️ Roadmap & Current Status
+## 📍 Roadmap & Current Status
 
 **Currently working / mostly working**
 * [x] Task-driven dynamic Ollama model routing
