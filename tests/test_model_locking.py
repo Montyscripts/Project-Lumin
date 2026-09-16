@@ -68,10 +68,13 @@ class TestModelLocking(unittest.TestCase):
     def test_route_hybrid_model_honors_lock_even_if_exceeding_resource_cap(self):
         """Locked model is honored even when Resource Governor rejects it based on size cap."""
         self.agent.force_model = "mistral:7b"
-        with patch.object(self.agent.resource_governor, "is_model_allowed", return_value=(False, "Size exceeds 3.0GB cap")):
-            client_type, model = self.agent._route_hybrid_model("general", "hello")
-            self.assertEqual(model, "mistral:7b")
-            self.assertEqual(self.agent.active_model, "mistral:7b")
+
+        # Pretend the locked model is installed so we only test the Resource Governor override path
+        with patch.object(self.agent, "_fetch_local_models", return_value=["mistral:7b", "llama3.2:3b"]):
+            with patch.object(self.agent.resource_governor, "is_model_allowed", return_value=(False, "Size exceeds 3.0GB cap")):
+                client_type, model = self.agent._route_hybrid_model("general", "hello")
+                self.assertEqual(model, "mistral:7b")
+                self.assertEqual(self.agent.active_model, "mistral:7b")
 
     def test_unlocked_model_uses_domain_routing(self):
         """When force_model is None, normal domain routing takes place."""
