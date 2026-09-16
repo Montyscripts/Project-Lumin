@@ -55,13 +55,13 @@ class TestModelOfflineAndMissing(unittest.TestCase):
     def test_missing_model_fallback_routing(self):
         """When targeted model is not installed locally, agent falls back to available model or default."""
         agent = LuminAgent()
-        agent.local_models = ["llama3.2:3b"]  # only llama3.2:3b installed
         agent.force_model = "qwen2.5-coder:7b"  # missing model forced
 
-        # Attempting routing when forced model is missing
-        provider, chosen_model = agent._route_hybrid_model("coding", "def solve(): pass")
+        # Isolate the test from live Ollama by mocking the model list
+        with patch.object(agent, "_fetch_local_models", return_value=["llama3.2:3b"]):
+            provider, chosen_model = agent._route_hybrid_model("coding", "def solve(): pass")
 
-        # Must fall back to installed model llama3.2:3b
+        # Must fall back to the only installed model
         self.assertEqual(chosen_model, "llama3.2:3b")
 
 

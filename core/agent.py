@@ -997,7 +997,7 @@ class LuminAgent:
         if self.force_model:
             # User lock always takes priority over Resource Governor size caps and
             # automatic routing. The user explicitly chose this model; honor it.
-            is_installed = not self.local_models or any(
+            is_installed = bool(self.local_models) and any(
                 self.force_model == inst or inst.startswith(self.force_model) or self.force_model in inst
                 for inst in self.local_models
             )
